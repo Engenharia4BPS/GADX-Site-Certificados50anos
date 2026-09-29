@@ -1,0 +1,4 @@
+Options -Indexes
+<FilesMatch "^(private-path|\\.env)">
+  Require all denied
+</FilesMatch>

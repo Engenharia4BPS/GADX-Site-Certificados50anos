@@ -1,37 +1,31 @@
-# Araucária DX — 50 anos
+# Araucária DX — Certificados 50 anos (FTP/cPanel)
 
-Portal público para emissão do diploma comemorativo da Araucária DX.
+Versão para hospedagem própria em **PHP 8.2 + MySQL/MariaDB**, sem Node.js, Cloudflare D1 ou login ChatGPT.
 
-## O que faz
+## Estrutura de publicação
 
-- Consulta pública por indicativo.
-- Certificado A4 pronto para imprimir ou salvar em PDF.
-- Figurinha PNG para compartilhamento.
-- Importação de logs ADIF na área administrativa.
-- Endossos de satélite e WFF, além de unidades de conservação.
-- Administração por múltiplos organizadores.
+| Origem deste repositório | Destino no servidor |
+| --- | --- |
+| `public/*` | `/home2/dxaraucariadx/public_html/50anos/` |
+| `private/*` | `/home2/dxaraucariadx/private/certificados50anos/` |
+| `sql/schema.sql` | Importe uma vez pelo phpMyAdmin |
 
-## Operação
+Não envie a pasta raiz inteira para `public_html`: somente o conteúdo de `public/` fica acessível pela web.
 
-1. Entre em `/admin` usando uma conta ChatGPT autorizada.
-2. Na primeira entrada, ative a área com a chave inicial configurada no ambiente do site.
-3. Importe um arquivo `.adi` ou `.adif`, dê um nome para a operação e marque os endossos aplicáveis.
-4. Informe as unidades de conservação no formato `REFERÊNCIA | Nome` — uma por linha.
-5. Os participantes já podem consultar o indicativo na página inicial e gerar o diploma.
+## Primeira instalação
 
-## Desenvolvimento
+1. Crie um banco MySQL e um usuário com privilégios somente nesse banco.
+2. Importe `sql/schema.sql` no phpMyAdmin.
+3. Copie `private/app/config.example.php` para `private/app/config.php` e preencha as credenciais do banco, `app_key` e `install_key`.
+4. Copie `public/private-path.example.php` para `public/private-path.php` e confira o caminho privado.
+5. Envie os dois grupos de arquivos por FTPS para os destinos da tabela.
+6. Acesse `https://araucariadx.com/50anos/admin/setup.php`, informe a chave de instalação e crie a conta proprietária.
+7. Apague ou renomeie `admin/setup.php` depois de criar o primeiro administrador.
 
-```bash
-npm install
-npm run db:generate
-npm run build
-```
+## Uso normal
 
-O projeto usa Cloudflare D1 para os dados persistentes. O segredo `ADMIN_SETUP_KEY` deve ser configurado como variável de ambiente no serviço de hospedagem; nunca o inclua no repositório.
+- Público: `https://araucariadx.com/50anos/`
+- Organização: `https://araucariadx.com/50anos/admin/`
+- Importe um ADIF por operação e marque WFF, satélite, unidades de conservação e endossos adicionais.
 
-## Estrutura principal
-
-- `app/` — páginas pública, administrativa e APIs.
-- `db/` e `drizzle/` — esquema e migrações do banco de dados.
-- `lib/adif.ts` — parser de ADIF.
-- `components/` — interface de consulta e administração.
+Os ADIFs originais são guardados fora de `public_html`. Nunca envie `config.php`, `private-path.php` ou arquivos de `private/storage/` ao GitHub.
