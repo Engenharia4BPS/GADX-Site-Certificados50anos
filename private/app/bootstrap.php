@@ -35,6 +35,12 @@ function h(?string $value): string { return htmlspecialchars($value ?? '', ENT_Q
 
 function start_secure_session(): void {
     if (session_status() === PHP_SESSION_ACTIVE) return;
+
+    $sessionPath = config('session_save_path');
+    if (is_string($sessionPath) && $sessionPath !== '' && is_dir($sessionPath) && is_writable($sessionPath)) {
+        session_save_path($sessionPath);
+    }
+
     session_name('ardx50_admin');
     session_set_cookie_params(['lifetime' => 0, 'path' => '/', 'secure' => (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off'), 'httponly' => true, 'samesite' => 'Lax']);
     session_start();

@@ -16,7 +16,7 @@ Não envie a pasta raiz inteira para `public_html`: somente o conteúdo de `publ
 
 1. Crie um banco MySQL e um usuário com privilégios somente nesse banco.
 2. Importe `sql/schema.sql` no phpMyAdmin.
-3. Copie `private/app/config.example.php` para `private/app/config.php` e preencha as credenciais do banco, `app_key` e `install_key`.
+3. Crie a pasta gravável `/home2/dxaraucariadx/tmp/ardx50-sessions` (permissão `700`). Copie `private/app/config.example.php` para `private/app/config.php` e preencha as credenciais do banco, `app_key` e `install_key`; mantenha `session_save_path` apontando para essa pasta.
 4. Copie `public/private-path.example.php` para `public/private-path.php` e confira o caminho privado.
 5. Envie os dois grupos de arquivos por FTPS para os destinos da tabela.
 6. Acesse `https://araucariadx.com/50anos/admin/setup.php`, informe a chave de instalação e crie a conta proprietária.

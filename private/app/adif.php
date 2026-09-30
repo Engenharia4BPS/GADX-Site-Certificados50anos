@@ -27,3 +27,16 @@ function parse_adif(string $contents): array {
     }
     return $rows;
 }
+
+function adif_activity_date(array $qsos): ?string {
+    $dates = [];
+    foreach ($qsos as $qso) {
+        $date = $qso['qso_date'] ?? null;
+        if (!is_string($date) || !preg_match('/^\d{8}$/', $date)) continue;
+        $parsed = DateTimeImmutable::createFromFormat('!Ymd', $date);
+        if ($parsed && $parsed->format('Ymd') === $date) $dates[] = $parsed->format('Y-m-d');
+    }
+    if (!$dates) return null;
+    sort($dates);
+    return $dates[0];
+}

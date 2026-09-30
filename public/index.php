@@ -1,3 +1,10 @@
+<?php
+declare(strict_types=1);
+
+require_once __DIR__ . '/_bootstrap.php';
+require_once CERT50_PRIVATE_ROOT . '/app/certificate.php';
+$certificateBackground = certificate_background();
+?>
 <!doctype html>
 <html lang="pt-BR">
 <head>
@@ -7,6 +14,9 @@
   <title>Araucária DX — 50 anos</title>
   <link rel="icon" href="assets/favicon.svg" type="image/svg+xml">
   <link rel="stylesheet" href="assets/site.css">
+  <?php if ($certificateBackground): ?>
+    <style>.certificate--with-background { background-image: url("assets/certificate/<?= rawurlencode($certificateBackground['filename']) ?>?v=<?= (int) filemtime($certificateBackground['path']) ?>"); background-position: center; background-repeat: no-repeat; background-size: cover; }</style>
+  <?php endif; ?>
 </head>
 <body>
   <header class="site-header">
@@ -36,7 +46,7 @@
 
     <section id="result" class="result" hidden>
       <div class="result-head print-hidden"><div><p class="eyebrow">RESULTADO ENCONTRADO</p><h2 id="result-title">Diploma</h2></div><div class="actions"><button id="print-certificate" class="secondary" type="button">Imprimir / salvar PDF</button><button id="download-card" type="button">Baixar figurinha</button></div></div>
-      <article id="certificate" class="certificate">
+      <article id="certificate" class="certificate<?= $certificateBackground ? ' certificate--with-background' : '' ?>">
         <div class="certificate-inner">
           <div class="certificate-top"><div><p>ARAUCÁRIA DX · 50 ANOS</p><h2>Certificado comemorativo</h2></div><span class="seal">50<br>ANOS</span></div>
           <div class="certificate-name"><p>A Araucária DX reconhece a participação de</p><strong id="certificate-callsign"></strong><p>nas atividades comemorativas do cinquentenário, registrando contatos, ativações e conquistas que fortalecem o radioamadorismo.</p></div>

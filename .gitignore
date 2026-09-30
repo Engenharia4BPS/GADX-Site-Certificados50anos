@@ -2,3 +2,5 @@ public/private-path.php
 private/app/config.php
 private/storage/adif/*
 !private/storage/adif/.gitkeep
+public/assets/certificate/certificate-background.*
+!public/assets/certificate/.gitkeep
