@@ -26,23 +26,65 @@ form.addEventListener('submit', async event => {
   } catch (error) { notice.textContent = error.message || 'Falha na consulta.'; }
 });
 
-function render(data) {
-  text(document.querySelector('#result-title'), `Diploma de ${data.callsign}`);
+function render(data, variant = 'participation') {
+  const isHall = variant === 'hall';
+  const certificate = document.querySelector('#certificate');
+  certificate.classList.toggle('certificate--hall', isHall);
+  certificate.classList.toggle('certificate--participation', !isHall);
+  certificate.classList.toggle('certificate--long-callsign', data.callsign.length > 8);
+  certificate.classList.toggle('certificate--very-long-callsign', data.callsign.length > 14);
+  text(document.querySelector('#result-title'), window.CERT50_PREVIEW ? `Prévia: ${isHall ? 'Hall of Fame' : 'Participação'}` : `Diploma de ${data.callsign}`);
+  text(document.querySelector('#certificate-variant-title'), isHall ? 'Homenagem · Hall of Fame' : 'Certificado de Participação');
+  text(document.querySelector('#certificate-feature-title'), isHall ? 'HOMENAGEM — HALL OF FAME GADX' : 'Uma história feita de contatos');
+  text(document.querySelector('#certificate-feature-description'), isHall ? 'Uma homenagem aos que construíram esta história.' : 'Cada QSO também faz parte destes 50 anos.');
   text(document.querySelector('#certificate-callsign'), data.callsign);
-  text(document.querySelector('#metric-qsos'), String(data.contacts));
-  text(document.querySelector('#metric-parks'), String(data.activations.length));
-  text(document.querySelector('#metric-bands'), data.bands.length ? data.bands.join(' · ') : '—');
-  text(document.querySelector('#activity-dates'), `Operações registradas: ${data.dates.map(dateBR).join(' · ') || '—'}`);
+  text(document.querySelector('#metric-qsos'), Number(data.contacts).toLocaleString('pt-BR'));
+  text(document.querySelector('#metric-bands'), String((data.bands || []).length));
+  text(document.querySelector('#metric-modes'), String((data.modes || []).length));
+  const dates = data.dates.map(dateBR);
+  text(document.querySelector('#activity-dates'), `Operações registradas: ${dates.slice(0, 2).join(' · ') || '—'}${dates.length > 2 ? ` · +${dates.length - 2} datas` : ''}`);
   const endorsements = document.querySelector('#endorsements');
-  endorsements.replaceChildren(...data.endorsements.map(item => { const chip = document.createElement('span'); chip.textContent = `✓ ${item.label}`; return chip; }));
+  const earnedEndorsements = data.endorsements.filter(item => item.code !== 'ARDX50');
+  endorsements.replaceChildren(...earnedEndorsements.map(item => { const chip = document.createElement('span'); chip.textContent = item.label; return chip; }));
+  if (!earnedEndorsements.length) text(endorsements, 'Selo comemorativo Araucária DX · 50 anos');
+  const badgeDefinitions = [
+    { code: 'WFF', symbol: '♣', label: 'WWFF' },
+    { code: 'POTA', symbol: '⌖', label: 'POTA' },
+    { code: 'SAT', symbol: '✦', label: 'SATÉLITE' },
+    { code: 'CW', symbol: '· −', label: 'CW' },
+  ];
+  const earnedCodes = new Set(data.achievement_codes || earnedEndorsements.map(item => item.code));
+  const badges = document.querySelector('#achievement-badges');
+  badges.replaceChildren(...badgeDefinitions.filter(badge => earnedCodes.has(badge.code)).map(badge => {
+    const element = document.createElement('div');
+    element.className = 'cert-badge';
+    element.setAttribute('aria-label', `Conquista ${badge.label}`);
+    const emblem = document.createElement('img');
+    emblem.className = 'cert-badge-emblem';
+    emblem.src = 'assets/brand-mark.svg';
+    emblem.alt = '';
+    const label = document.createElement('strong'); label.textContent = badge.label;
+    element.append(emblem, label);
+    return element;
+  }));
+  if (!badges.childElementCount) { const empty = document.createElement('p'); empty.className = 'cert-no-badges'; empty.textContent = 'Novas conquistas poderão aparecer aqui.'; badges.append(empty); }
   const parks = document.querySelector('#parks');
-  text(parks, data.activations.length ? data.activations.map(item => `${item.reference}${item.name ? ` — ${item.name}` : ''}`).join(' · ') : 'Nenhuma unidade de conservação vinculada aos contatos importados.');
+  const parkNames = data.activations.slice(0, 3).map(item => `${item.reference}${item.name ? ` — ${item.name}` : ''}`);
+  text(parks, data.activations.length ? `${parkNames.join(' · ')}${data.activations.length > 3 ? ` · e mais ${data.activations.length - 3}` : ''}` : 'Nenhuma referência vinculada aos contatos importados.');
   result.hidden = false;
   result.scrollIntoView({ behavior: 'smooth', block: 'start' });
 }
 
-document.querySelector('#print-certificate').addEventListener('click', () => window.print());
-document.querySelector('#download-card').addEventListener('click', () => {
+if (window.CERT50_PREVIEW) {
+  currentRecord = window.CERT50_PREVIEW.data;
+  render(currentRecord, window.CERT50_PREVIEW.variant);
+}
+
+document.querySelector('#print-certificate')?.addEventListener('click', async () => {
+  await document.fonts.ready;
+  window.print();
+});
+document.querySelector('#download-card')?.addEventListener('click', () => {
   if (!currentRecord) return;
   const canvas = document.createElement('canvas'); canvas.width = 1600; canvas.height = 900;
   const ctx = canvas.getContext('2d'); if (!ctx) return;

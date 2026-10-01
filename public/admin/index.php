@@ -9,6 +9,8 @@ $admin = require_admin();
 $success = flash('success');
 $error = flash('error');
 $certificateBackground = certificate_background();
+$hallPhoto = certificate_hall_photo();
+$certificateLogo = certificate_logo();
 
 $uploads = db()->query(
     'SELECT u.id, u.label, u.activity_date, u.source_filename, u.stored_filename, u.is_satellite, u.is_wff, u.notes, u.created_at,
@@ -61,7 +63,7 @@ $formatDate = static function (?string $date): string {
 </head>
 <body>
   <header class="site-header">
-    <a class="brand" href="../"><span class="brand-mark">⌁</span><span><strong>ARAUCÁRIA DX</strong><small>GESTÃO · 50 ANOS</small></span></a>
+    <a class="brand" href="../"><img class="brand-mark" src="../assets/brand-mark.svg" alt=""><span><strong>ARAUCÁRIA DX</strong><small>GESTÃO · 50 ANOS</small></span></a>
     <a class="admin-link" href="../">Ver consulta pública</a>
   </header>
 
@@ -73,6 +75,8 @@ $formatDate = static function (?string $date): string {
       <a href="#nova-importacao">Nova importação</a>
       <a href="#adifs-importados">ADIFs importados</a>
       <a href="#imagem-diploma">Imagem do diploma</a>
+      <a href="#logo-50anos">Logo 50 anos</a>
+      <a href="#foto-hall">Foto Hall of Fame</a>
       <?php if ($admin['role'] === 'owner'): ?><a href="users.php">Administradores</a><?php endif; ?>
       <a href="logout.php">Sair (<?= h($admin['email']) ?>)</a>
     </nav>
@@ -123,6 +127,56 @@ $formatDate = static function (?string $date): string {
       </div>
     </section>
 
+    <section id="logo-50anos" class="certificate-image-settings admin-card" aria-labelledby="certificate-logo-title">
+      <div>
+        <p class="eyebrow">MARCA COMEMORATIVA</p>
+        <h2 id="certificate-logo-title">Logo dos 50 anos</h2>
+        <p>Esta logo substitui o pequeno círculo “50 anos” ao lado do título nas versões Participação e Hall of Fame. Prefira PNG ou WebP com fundo transparente e sem margens grandes; a imagem será exibida inteira, sem cortes.</p>
+        <form action="certificate-image.php" method="post" enctype="multipart/form-data">
+          <input type="hidden" name="csrf" value="<?= h(csrf_token()) ?>">
+          <input type="hidden" name="image_kind" value="logo">
+          <label class="field">Logo (JPG, PNG ou WebP, até 8 MB)<input type="file" name="certificate_image" accept="image/jpeg,image/png,image/webp" required></label>
+          <div class="form-actions"><button type="submit">Enviar logo</button></div>
+        </form>
+      </div>
+      <div class="certificate-image-preview certificate-logo-preview">
+        <?php if ($certificateLogo): ?>
+          <img src="../assets/certificate/<?= rawurlencode($certificateLogo['filename']) ?>?v=<?= (int) filemtime($certificateLogo['path']) ?>" alt="Logo atual dos 50 anos">
+          <p class="small">Logo atual: <?= h($certificateLogo['filename']) ?></p>
+        <?php else: ?>
+          <div class="certificate-image-placeholder">Círculo “50 anos” em uso</div>
+          <p class="small">Nenhuma logo foi enviada.</p>
+        <?php endif; ?>
+      </div>
+    </section>
+
+    <section id="foto-hall" class="certificate-image-settings admin-card" aria-labelledby="hall-photo-title">
+      <div>
+        <p class="eyebrow">VERSÃO HALL OF FAME</p>
+        <h2 id="hall-photo-title">Foto dos homenageados</h2>
+        <p>Envie a foto do grupo para a composição Hall of Fame, de preferência PNG com fundo transparente. Ela só aparecerá nessa versão; Participação continua sem a foto.</p>
+        <form action="hall-photo.php" method="post" enctype="multipart/form-data">
+          <input type="hidden" name="csrf" value="<?= h(csrf_token()) ?>">
+          <label class="field">Foto do Hall of Fame (JPG, PNG ou WebP, até 8 MB)<input type="file" name="hall_photo" accept="image/jpeg,image/png,image/webp" required></label>
+          <div class="form-actions"><button type="submit">Enviar foto</button></div>
+        </form>
+      </div>
+      <div class="certificate-image-preview">
+        <?php if ($hallPhoto): ?>
+          <img src="../assets/certificate/<?= rawurlencode($hallPhoto['filename']) ?>?v=<?= (int) filemtime($hallPhoto['path']) ?>" alt="Foto atual do Hall of Fame">
+          <p class="small">Foto atual: <?= h($hallPhoto['filename']) ?></p>
+        <?php else: ?>
+          <div class="certificate-image-placeholder">Foto ainda não enviada</div>
+          <p class="small">A composição usa um espaço decorativo até você enviar a foto.</p>
+        <?php endif; ?>
+      </div>
+    </section>
+
+    <section class="admin-card visual-preview-links" aria-labelledby="visual-preview-title">
+      <div><p class="eyebrow">PRÉVIAS · DADOS ILUSTRATIVOS</p><h2 id="visual-preview-title">Duas versões visuais</h2><p>Compare a versão de Participação com a composição Hall of Fame. A categoria Hall of Fame ainda não será emitida automaticamente enquanto definimos o critério.</p></div>
+      <div class="form-actions"><a class="admin-link" href="../?preview=participation#result">Ver Participação</a><a class="admin-link" href="../?preview=hall#result">Ver Hall of Fame</a></div>
+    </section>
+
     <section id="adifs-importados" class="uploads-section" aria-labelledby="uploads-title">
       <div class="section-heading">
         <div>
@@ -141,7 +195,10 @@ $formatDate = static function (?string $date): string {
               $uploadId = (int) $upload['id'];
               $hasSatellite = (int) $upload['is_satellite'] === 1;
               $hasWff = (int) $upload['is_wff'] === 1;
-              $customEndorsements = $endorsementsByUpload[$uploadId] ?? [];
+              $uploadEndorsements = $endorsementsByUpload[$uploadId] ?? [];
+              $hasPota = (bool) array_filter($uploadEndorsements, static fn(array $endorsement): bool => $endorsement['code'] === 'POTA');
+              $customEndorsements = array_values(array_filter($uploadEndorsements, static fn(array $endorsement): bool => $endorsement['code'] !== 'POTA'));
+              $hasMfsk = (bool) array_filter($breakdowns[$uploadId]['modes'] ?? [], static fn(array $stat): bool => strtoupper((string) $stat['label']) === 'MFSK');
               $activationText = implode(PHP_EOL, array_map(
                   static fn(array $activation): string => $activation['reference_code'] . ($activation['name'] ? ' | ' . $activation['name'] : ''),
                   $activationsByUpload[$uploadId] ?? []
@@ -161,7 +218,8 @@ $formatDate = static function (?string $date): string {
                 <div class="current-endorsements" aria-label="Endossos atuais">
                   <span class="tag">Araucária DX · 50 anos</span>
                   <?php if ($hasSatellite): ?><span class="tag">Via satélite</span><?php endif; ?>
-                  <?php if ($hasWff): ?><span class="tag">Ativação WFF</span><?php endif; ?>
+                  <?php if ($hasWff): ?><span class="tag">Ativação WWFF</span><?php endif; ?>
+                  <?php if ($hasPota): ?><span class="tag">Ativação POTA</span><?php endif; ?>
                   <?php foreach ($customEndorsements as $endorsement): ?><span class="tag"><?= h($endorsement['label']) ?></span><?php endforeach; ?>
                 </div>
               </div>
@@ -178,19 +236,39 @@ $formatDate = static function (?string $date): string {
                 <form action="update-upload.php" method="post">
                   <input type="hidden" name="csrf" value="<?= h(csrf_token()) ?>">
                   <input type="hidden" name="upload_id" value="<?= $uploadId ?>">
-                  <p class="editor-help">O selo <strong>Araucária DX · 50 anos</strong> é aplicado automaticamente. As escolhas abaixo valem para todos os participantes deste arquivo.</p>
+                  <p class="editor-help">O selo <strong>Araucária DX · 50 anos</strong> é aplicado automaticamente. As escolhas abaixo valem para todos os participantes deste arquivo; o selo CW é reconhecido pelo modo de cada QSO.</p>
                   <div class="two-fields">
                     <label class="field">Nome da operação<input name="label" maxlength="180" value="<?= h($upload['label']) ?>" required></label>
                     <label class="field">Data da atividade<input type="date" name="activity_date" value="<?= h($upload['activity_date']) ?>"></label>
                   </div>
                   <div class="checkbox-row">
                     <label class="checkbox"><input type="checkbox" name="satellite" value="1"<?= $hasSatellite ? ' checked' : '' ?>>Contato via satélite</label>
-                    <label class="checkbox"><input type="checkbox" name="wff" value="1"<?= $hasWff ? ' checked' : '' ?>>Ativação WFF</label>
+                    <label class="checkbox"><input type="checkbox" name="wff" value="1"<?= $hasWff ? ' checked' : '' ?>>Ativação WWFF</label>
+                    <label class="checkbox"><input type="checkbox" name="pota" value="1"<?= $hasPota ? ' checked' : '' ?>>Ativação POTA</label>
                   </div>
+                  <p class="small">Marque POTA apenas quando os contatos deste ADIF participarem da ativação POTA.</p>
                   <label class="field">Unidades de conservação<textarea name="activations" placeholder="Uma por linha: PR-0001 | Nome da unidade&#10;Se não houver, deixe em branco."><?= h($activationText) ?></textarea></label>
                   <label class="field">Endossos adicionais<textarea name="endorsements" placeholder="Um por linha: CODIGO | Nome do endosso&#10;Ex.: SAT-QO100 | QO-100"><?= h($customText) ?></textarea></label>
                   <label class="field">Observações internas<textarea name="notes" placeholder="Opcional — não aparece no diploma."><?= h($upload['notes']) ?></textarea></label>
                   <div class="form-actions"><button type="submit">Salvar alterações</button></div>
+                </form>
+                <?php if ($hasMfsk): ?>
+                  <form action="reindex-modes.php" method="post" class="reindex-form">
+                    <input type="hidden" name="csrf" value="<?= h(csrf_token()) ?>">
+                    <input type="hidden" name="upload_id" value="<?= $uploadId ?>">
+                    <button class="secondary" type="submit">Identificar submodos (FT4 e outros)</button>
+                    <p class="small">Relê o ADIF original e só corrige modos MFSK quando os QSOs corresponderem. Não cria novos contatos.</p>
+                  </form>
+                <?php endif; ?>
+              </details>
+              <details class="upload-delete">
+                <summary>Apagar este log</summary>
+                <form action="delete-upload.php" method="post">
+                  <input type="hidden" name="csrf" value="<?= h(csrf_token()) ?>">
+                  <input type="hidden" name="upload_id" value="<?= $uploadId ?>">
+                  <p>Isso apagará <strong><?= h($upload['stored_filename']) ?></strong>, seus <?= h((string) $upload['qso_count']) ?> QSOs, ativações e endossos. O ranking e os certificados serão recalculados sem esses contatos. Esta ação não pode ser desfeita.</p>
+                  <label class="upload-delete-confirm"><input type="checkbox" name="confirm_delete" value="1" required> Confirmo que quero apagar este log e seus dados.</label>
+                  <button type="submit" class="delete-button">Apagar log definitivamente</button>
                 </form>
               </details>
             </article>

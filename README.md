@@ -26,6 +26,16 @@ Não envie a pasta raiz inteira para `public_html`: somente o conteúdo de `publ
 
 - Público: `https://araucariadx.com/50anos/`
 - Organização: `https://araucariadx.com/50anos/admin/`
-- Importe um ADIF por operação e marque WFF, satélite, unidades de conservação e endossos adicionais.
+- Importe um ADIF por operação e marque WWFF, POTA, satélite, unidades de conservação e endossos adicionais. O selo CW é reconhecido automaticamente nos QSOs cujo modo é CW.
+- POTA é marcado por ADIF na edição da operação. O selo usa a tabela `endorsements` já existente; nenhuma alteração no banco é necessária.
+- O painel permite enviar a foto do Hall of Fame e abrir as prévias visuais de Participação e Hall of Fame com dados ilustrativos. Até a regra de elegibilidade ser definida, a consulta pública emite apenas Participação.
+- Em “Logo 50 anos”, envie a marca oficial em PNG, JPG ou WebP para substituir o pequeno círculo ao lado do título em ambas as versões do certificado. Sem uma logo enviada, o círculo continua visível.
+- O ranking público reúne os contatos de todos os ADIFs da ZW50B: uma linha por indicativo, bandas distintas, QSOs totais e conquistas. Ao abrir BANDS, mostra os modos e respectivas quantidades em cada banda; SAT é uma coluna adicional e não duplica o TOTAL.
+- Em novas importações, o submodo FT4 de ADIFs MFSK é mostrado como FT4. Para ADIFs antigos que aparecem como MFSK, abra a operação no painel e use “Identificar submodos”; a rotina confere o arquivo original antes de atualizar o modo, sem duplicar QSOs.
+- Em “ADIFs importados”, cada log tem a opção “Apagar este log”. Após a confirmação, a exclusão remove o ADIF privado e os QSOs, ativações e endossos daquele arquivo; o ranking e os certificados deixam de contabilizá-lo. A ação não pode ser desfeita.
 
 Os ADIFs originais são guardados fora de `public_html`. Nunca envie `config.php`, `private-path.php` ou arquivos de `private/storage/` ao GitHub.
+
+## Atualização da tipografia
+
+Envie também a pasta `public/assets/fonts/` ao atualizar `public/assets/site.css` e `public/assets/award.js`. Ela contém as fontes do certificado e suas licenças; sem esses arquivos, o navegador usará fontes de reserva. Os detalhes de origem estão em `public/assets/fonts/README.md`.

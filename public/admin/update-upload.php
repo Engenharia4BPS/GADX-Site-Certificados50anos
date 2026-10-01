@@ -28,7 +28,7 @@ try {
     $notes = trim((string) ($_POST['notes'] ?? '')) ?: null;
 
     $customEndorsements = [];
-    $reservedCodes = ['ARDX50', 'WFF', 'SAT'];
+    $reservedCodes = ['ARDX50', 'WFF', 'POTA', 'SAT', 'CW'];
     foreach (preg_split('/\R/', (string) ($_POST['endorsements'] ?? '')) as $line) {
         $line = trim($line);
         if ($line === '') continue;
@@ -83,6 +83,9 @@ try {
 
     $removeCustom = $pdo->prepare('DELETE FROM endorsements WHERE upload_id = ?');
     $removeCustom->execute([$uploadId]);
+    if (isset($_POST['pota'])) {
+        $customEndorsements['POTA'] = ['code' => 'POTA', 'label' => 'Ativação POTA'];
+    }
     if ($customEndorsements) {
         $insertCustom = $pdo->prepare('INSERT INTO endorsements (upload_id, code, label) VALUES (?, ?, ?)');
         foreach ($customEndorsements as $endorsement) {

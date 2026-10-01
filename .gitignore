@@ -3,4 +3,6 @@ private/app/config.php
 private/storage/adif/*
 !private/storage/adif/.gitkeep
 public/assets/certificate/certificate-background.*
+public/assets/certificate/hall-of-fame-photo.*
+public/assets/certificate/anniversary-logo.*
 !public/assets/certificate/.gitkeep

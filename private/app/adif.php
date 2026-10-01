@@ -17,12 +17,15 @@ function parse_adif(string $contents): array {
         $callsign = strtoupper((string) adif_field($record, 'CALL'));
         $callsign = preg_replace('/[^A-Z0-9\\/]/', '', $callsign);
         if (strlen($callsign) < 3) continue;
+        $mode = strtoupper((string) adif_field($record, 'MODE')) ?: null;
+        $submode = strtoupper((string) adif_field($record, 'SUBMODE')) ?: null;
+        if ($mode === 'MFSK' && $submode !== null) $mode = $submode;
         $rows[] = [
             'callsign' => $callsign,
             'qso_date' => adif_field($record, 'QSO_DATE'),
             'qso_time' => adif_field($record, 'TIME_ON'),
             'band' => strtoupper((string) adif_field($record, 'BAND')) ?: null,
-            'mode' => strtoupper((string) adif_field($record, 'MODE')) ?: null,
+            'mode' => $mode,
         ];
     }
     return $rows;
