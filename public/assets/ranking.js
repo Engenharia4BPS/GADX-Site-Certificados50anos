@@ -1,3 +1,4 @@
+(() => {
 const rankingForm = document.querySelector('#ranking-search');
 const rankingInput = document.querySelector('#ranking-callsign');
 const rankingStatus = document.querySelector('#ranking-status');
@@ -11,8 +12,12 @@ let rankingPage = 1;
 let rankingSearch = '';
 let rankingPageCount = 1;
 let rankingRequest = null;
+let rankingData = null;
+const i18n = window.CERT50_I18N;
+const t = (key, values = {}) => i18n?.t(key, values) ?? key;
+const rankingLocale = () => i18n?.getLocale() ?? 'pt-BR';
 
-const rankingNumber = value => Number(value).toLocaleString('pt-BR');
+const rankingNumber = value => i18n?.number(value) ?? Number(value).toLocaleString(rankingLocale());
 
 function rankedModes(modes) {
   return Object.entries(modes || {}).sort(([first], [second]) => {
@@ -23,14 +28,14 @@ function rankedModes(modes) {
       if (secondIndex === -1) return -1;
       return firstIndex - secondIndex;
     }
-    return first.localeCompare(second, 'pt-BR');
+    return first.localeCompare(second, rankingLocale());
   });
 }
 
 function bandColumns(record) {
   const extras = Object.keys(record.bands || {})
     .filter(band => !physicalBands.includes(band) && band !== 'SEM BANDA')
-    .sort((first, second) => first.localeCompare(second, 'pt-BR', { numeric: true }));
+    .sort((first, second) => first.localeCompare(second, rankingLocale(), { numeric: true }));
   const columns = [...physicalBands, ...extras];
   if (Object.hasOwn(record.bands || {}, 'SEM BANDA')) columns.push('SEM BANDA');
   columns.push('SAT');
@@ -46,16 +51,16 @@ function bandDetails(record, id) {
   cell.colSpan = 4;
   const hint = document.createElement('p');
   hint.className = 'band-grid-hint';
-  hint.textContent = 'Deslize para ver todas as bandas e a coluna SAT →';
+  hint.textContent = t('ranking.detail_hint');
   const scroll = document.createElement('div');
   scroll.className = 'band-grid-scroll';
   scroll.tabIndex = 0;
-  scroll.setAttribute('aria-label', 'Bandas e modos de ' + record.callsign + '; role horizontalmente para ver todas');
+  scroll.setAttribute('aria-label', t('ranking.detail_aria', { callsign: record.callsign }));
   const table = document.createElement('table');
   table.className = 'band-grid';
   const caption = document.createElement('caption');
   caption.className = 'sr-only';
-  caption.textContent = 'Contatos de ' + record.callsign + ' por banda e modo';
+  caption.textContent = t('ranking.detail_caption', { callsign: record.callsign });
   table.append(caption);
   const head = document.createElement('thead');
   const headRow = document.createElement('tr');
@@ -95,14 +100,16 @@ function bandDetails(record, id) {
 }
 
 function renderRanking(data) {
+  rankingData = data;
   rankingRows.replaceChildren();
   rankingPage = Number(data.page);
   rankingPageCount = Number(data.page_count);
   const total = Number(data.total_participants);
+  const searchText = rankingSearch ? t(total === 1 ? 'ranking.search_one' : 'ranking.search_many', { callsign: rankingSearch }) : '';
   rankingStatus.textContent = total
-    ? rankingNumber(total) + ' ' + (total === 1 ? 'participante' : 'participantes') + (rankingSearch ? (total === 1 ? ' encontrado para ' : ' encontrados para ') + rankingSearch : '') + '.'
-    : rankingSearch ? 'Nenhum indicativo encontrado para ' + rankingSearch + '.' : 'Nenhum ADIF importado ainda.';
-  rankingPageLabel.textContent = 'Página ' + rankingPage + ' de ' + rankingPageCount;
+    ? t(total === 1 ? 'ranking.status_one' : 'ranking.status_many', { count: rankingNumber(total), search: searchText })
+    : rankingSearch ? t('ranking.empty_search', { callsign: rankingSearch }) : t('ranking.empty');
+  rankingPageLabel.textContent = t('ranking.page', { page: rankingPage, pages: rankingPageCount });
   rankingPrev.disabled = rankingPage <= 1;
   rankingNext.disabled = rankingPage >= rankingPageCount;
 
@@ -118,7 +125,7 @@ function renderRanking(data) {
     callButton.className = 'ranking-call';
     callButton.type = 'button';
     callButton.textContent = record.callsign;
-    callButton.setAttribute('aria-label', 'Consultar diploma de ' + record.callsign);
+    callButton.setAttribute('aria-label', t('ranking.callsign_aria', { callsign: record.callsign }));
     callButton.addEventListener('click', () => {
       document.querySelector('#callsign').value = record.callsign;
       document.querySelector('#lookup-form').requestSubmit();
@@ -129,7 +136,7 @@ function renderRanking(data) {
     const bandsButton = document.createElement('button');
     bandsButton.className = 'ranking-expand';
     bandsButton.type = 'button';
-    bandsButton.textContent = record.band_count + ' ' + (record.band_count === 1 ? 'banda' : 'bandas') + '  ▾';
+    bandsButton.textContent = t(record.band_count === 1 ? 'ranking.band_one' : 'ranking.band_many', { count: rankingNumber(record.band_count) }) + '  ' + t('ranking.expand');
     bandsButton.setAttribute('aria-controls', detailId);
     bandsButton.setAttribute('aria-expanded', 'false');
     bandsCell.append(bandsButton);
@@ -151,7 +158,7 @@ function renderRanking(data) {
     bandsButton.addEventListener('click', () => {
       detailRow.hidden = !detailRow.hidden;
       bandsButton.setAttribute('aria-expanded', String(!detailRow.hidden));
-      bandsButton.textContent = record.band_count + ' ' + (record.band_count === 1 ? 'banda' : 'bandas') + '  ' + (detailRow.hidden ? '▾' : '▴');
+      bandsButton.textContent = t(record.band_count === 1 ? 'ranking.band_one' : 'ranking.band_many', { count: rankingNumber(record.band_count) }) + '  ' + t(detailRow.hidden ? 'ranking.expand' : 'ranking.collapse');
     });
     rankingRows.append(mainRow, detailRow);
   }
@@ -161,7 +168,7 @@ async function loadRanking(page = 1) {
   if (rankingRequest) rankingRequest.abort();
   const controller = new AbortController();
   rankingRequest = controller;
-  rankingStatus.textContent = 'Carregando participantes…';
+  rankingStatus.textContent = t('ranking.loading');
   rankingPrev.disabled = true;
   rankingNext.disabled = true;
   try {
@@ -169,12 +176,12 @@ async function loadRanking(page = 1) {
     if (rankingSearch) parameters.set('q', rankingSearch);
     const response = await fetch('api/ranking.php?' + parameters, { cache: 'no-store', signal: controller.signal });
     const data = await response.json();
-    if (!response.ok) throw new Error(data.error || 'Não foi possível carregar o ranking.');
+    if (!response.ok) throw new Error(t('ranking.error'));
     renderRanking(data);
   } catch (error) {
     if (error.name === 'AbortError') return;
     rankingRows.replaceChildren();
-    rankingStatus.textContent = error.message || 'Não foi possível carregar o ranking.';
+    rankingStatus.textContent = error.message || t('ranking.error');
     rankingPageLabel.textContent = '—';
   } finally {
     if (rankingRequest === controller) rankingRequest = null;
@@ -189,4 +196,8 @@ rankingForm.addEventListener('submit', event => {
 });
 rankingPrev.addEventListener('click', () => loadRanking(rankingPage - 1));
 rankingNext.addEventListener('click', () => loadRanking(rankingPage + 1));
+document.addEventListener('cert50:languagechange', () => {
+  if (rankingData) renderRanking(rankingData);
+});
 loadRanking();
+})();
