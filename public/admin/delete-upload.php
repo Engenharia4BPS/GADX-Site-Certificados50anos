@@ -31,6 +31,26 @@ try {
     $upload = $find->fetch();
     if (!$upload) throw new RuntimeException('Este ADIF não foi encontrado.');
 
+    $stations = $pdo->prepare('SELECT station_callsign FROM upload_stations WHERE upload_id = ? FOR UPDATE');
+    $stations->execute([$uploadId]);
+    $affectedStations = $stations->fetchAll(PDO::FETCH_COLUMN);
+    $currentForStation = $pdo->prepare('SELECT upload_id FROM station_current_uploads WHERE station_callsign = ? FOR UPDATE');
+    $previousSnapshot = $pdo->prepare('SELECT upload_id FROM upload_stations WHERE station_callsign = ? AND upload_id <> ? ORDER BY upload_id DESC LIMIT 1');
+    $restoreCurrent = $pdo->prepare('UPDATE station_current_uploads SET upload_id = ? WHERE station_callsign = ? AND upload_id = ?');
+    $clearCurrent = $pdo->prepare('DELETE FROM station_current_uploads WHERE station_callsign = ? AND upload_id = ?');
+    foreach ($affectedStations as $station) {
+        $currentForStation->execute([$station]);
+        if ((int) $currentForStation->fetchColumn() !== $uploadId) continue;
+
+        $previousSnapshot->execute([$station, $uploadId]);
+        $previousUploadId = $previousSnapshot->fetchColumn();
+        if ($previousUploadId !== false) {
+            $restoreCurrent->execute([(int) $previousUploadId, $station, $uploadId]);
+        } else {
+            $clearCurrent->execute([$station, $uploadId]);
+        }
+    }
+
     $filename = (string) $upload['stored_filename'];
     if (!preg_match('/^[A-Za-z0-9][A-Za-z0-9._-]*\.(?:adi|adif)$/iD', $filename)) {
         throw new RuntimeException('O nome do arquivo ADIF guardado é inválido. Nenhum dado foi apagado.');
@@ -60,7 +80,7 @@ try {
         error_log('ARDX50 delete upload: ADIF removido do banco, mas arquivo temporário não pôde ser apagado: ' . $stagedFile);
         flash('error', 'O log foi removido do site, mas o arquivo ADIF privado precisa ser apagado manualmente. Consulte o registro de erros do servidor.');
     } else {
-        flash('success', 'Log ' . $filename . ' apagado. Seus QSOs, ativações e endossos saíram do site.');
+        flash('success', 'Snapshot ' . $filename . ' apagado. As estações afetadas voltaram ao snapshot anterior disponível.');
     }
 } catch (Throwable $error) {
     if (isset($pdo) && $pdo->inTransaction()) $pdo->rollBack();

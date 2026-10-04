@@ -6,6 +6,7 @@ require_once CERT50_PRIVATE_ROOT . '/app/auth.php';
 require_once CERT50_PRIVATE_ROOT . '/app/adif.php';
 
 $admin = require_admin();
+$eventStations = event_stations();
 if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
     header('Location: index.php');
     exit;
@@ -45,7 +46,20 @@ try {
     if ($contents === false) throw new RuntimeException('Não foi possível ler o arquivo enviado.');
     $qsos = parse_adif($contents);
     if (!$qsos) throw new RuntimeException('Nenhum registro QSO foi encontrado no ADIF.');
-    if (count($qsos) > 50000) throw new RuntimeException('Limite de 50.000 QSOs por arquivo.');
+    if (count($qsos) > 100000) throw new RuntimeException('Limite de 100.000 QSOs por arquivo.');
+
+    $stationGroups = [];
+    foreach ($qsos as $qso) {
+        $station = $qso['station_callsign'] ?? null;
+        if (!is_string($station) || $station === '') {
+            throw new RuntimeException('O ADIF precisa informar STATION_CALLSIGN ou MY_CALL. Exportações do Club Log também são aceitas quando trazem “Log export of INDICATIVO” no cabeçalho. Nenhum dado foi importado.');
+        }
+        if (!in_array($station, $eventStations, true)) {
+            throw new RuntimeException("A estação $station não pertence à lista habilitada: ZW5B, ZW50B, PY5GA e PQ5TA.");
+        }
+        $stationGroups[$station][] = $qso;
+    }
+    ksort($stationGroups);
 
     $storage = CERT50_PRIVATE_ROOT . '/storage/adif';
     if (!is_dir($storage) || !is_writable($storage)) {
@@ -67,8 +81,11 @@ try {
     $insertUpload->execute(['Importação em processamento', imported_activity_date($qsos), $sourceFilename, 'pendente', $admin['id']]);
     $uploadId = (int) $pdo->lastInsertId();
     $index = sprintf('Log50ano%03d', $uploadId);
-    $storedName = "$index-$safeStem.$extension";
-    $label = mb_substr("$index — $sourceFilename", 0, 180);
+    $stationLabel = implode('-', array_keys($stationGroups));
+    $maxStemLength = 255 - strlen($index) - strlen($stationLabel) - strlen($extension) - 3;
+    $safeStem = substr($safeStem, 0, max(1, $maxStemLength));
+    $storedName = "$index-$stationLabel-$safeStem.$extension";
+    $label = mb_substr("$index · $stationLabel — $sourceFilename", 0, 180);
 
     if (!move_uploaded_file($file['tmp_name'], $storage . '/' . $storedName)) {
         throw new RuntimeException('Não foi possível guardar o ADIF na pasta privada.');
@@ -77,13 +94,30 @@ try {
     $updateUpload = $pdo->prepare('UPDATE uploads SET label = ?, stored_filename = ? WHERE id = ?');
     $updateUpload->execute([$label, $storedName, $uploadId]);
 
-    $qsoInsert = $pdo->prepare('INSERT INTO qsos (upload_id, callsign, qso_date, qso_time, band, mode) VALUES (?, ?, ?, ?, ?, ?)');
+    $qsoInsert = $pdo->prepare('INSERT INTO qsos (upload_id, station_callsign, callsign, qso_date, qso_time, band, mode, is_satellite, is_wff, is_pota) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)');
     foreach ($qsos as $qso) {
-        $qsoInsert->execute([$uploadId, $qso['callsign'], $qso['qso_date'], $qso['qso_time'], $qso['band'], $qso['mode']]);
+        $qsoInsert->execute([
+            $uploadId,
+            $qso['station_callsign'],
+            $qso['callsign'],
+            $qso['qso_date'],
+            $qso['qso_time'],
+            $qso['band'],
+            $qso['mode'],
+            $qso['is_satellite'] ? 1 : 0,
+            $qso['is_wff'] ? 1 : 0,
+            $qso['is_pota'] ? 1 : 0,
+        ]);
+    }
+    $stationInsert = $pdo->prepare('INSERT INTO upload_stations (upload_id, station_callsign, qso_count) VALUES (?, ?, ?)');
+    $setCurrent = $pdo->prepare('INSERT INTO station_current_uploads (station_callsign, upload_id) VALUES (?, ?) ON DUPLICATE KEY UPDATE upload_id = VALUES(upload_id), updated_at = CURRENT_TIMESTAMP');
+    foreach ($stationGroups as $station => $stationQsos) {
+        $stationInsert->execute([$uploadId, $station, count($stationQsos)]);
+        $setCurrent->execute([$station, $uploadId]);
     }
 
     $pdo->commit();
-    flash('success', sprintf('%s importado: %d QSOs e %d indicativos únicos.', $storedName, count($qsos), count(array_unique(array_column($qsos, 'callsign')))));
+    flash('success', sprintf('%s sincronizado: %d QSOs, %d indicativos únicos e %d estação(ões): %s.', $storedName, count($qsos), count(array_unique(array_column($qsos, 'callsign'))), count($stationGroups), implode(', ', array_keys($stationGroups))));
 } catch (Throwable $error) {
     if (isset($pdo) && $pdo->inTransaction()) $pdo->rollBack();
     if (isset($storedName)) @unlink((CERT50_PRIVATE_ROOT ?? '') . '/storage/adif/' . $storedName);

@@ -8,6 +8,7 @@ const rankingPrev = document.querySelector('#ranking-prev');
 const rankingNext = document.querySelector('#ranking-next');
 const physicalBands = ['160M', '80M', '60M', '40M', '30M', '20M', '17M', '15M', '12M', '10M', '6M', '2M'];
 const preferredModes = ['FT8', 'FT4', 'CW', 'SSB'];
+const preferredStations = ['ZW5B', 'ZW50B', 'PY5GA', 'PQ5TA'];
 let rankingPage = 1;
 let rankingSearch = '';
 let rankingPageCount = 1;
@@ -19,16 +20,26 @@ const rankingLocale = () => i18n?.getLocale() ?? 'pt-BR';
 
 const rankingNumber = value => i18n?.number(value) ?? Number(value).toLocaleString(rankingLocale());
 
-function rankedModes(modes) {
-  return Object.entries(modes || {}).sort(([first], [second]) => {
-    const firstIndex = preferredModes.indexOf(first);
-    const secondIndex = preferredModes.indexOf(second);
+function rankedModes(contacts) {
+  const normalized = Array.isArray(contacts)
+    ? contacts
+    : Object.entries(contacts || {}).map(([mode, count]) => ({ station: '', mode, count }));
+  return normalized.sort((first, second) => {
+    const firstStation = preferredStations.indexOf(first.station);
+    const secondStation = preferredStations.indexOf(second.station);
+    if (firstStation !== secondStation) {
+      if (firstStation === -1) return 1;
+      if (secondStation === -1) return -1;
+      return firstStation - secondStation;
+    }
+    const firstIndex = preferredModes.indexOf(first.mode);
+    const secondIndex = preferredModes.indexOf(second.mode);
     if (firstIndex !== -1 || secondIndex !== -1) {
       if (firstIndex === -1) return 1;
       if (secondIndex === -1) return -1;
       return firstIndex - secondIndex;
     }
-    return first.localeCompare(second, rankingLocale());
+    return first.mode.localeCompare(second.mode, rankingLocale());
   });
 }
 
@@ -80,10 +91,12 @@ function bandDetails(record, id) {
     } else {
       const pills = document.createElement('div');
       pills.className = 'mode-pills';
-      for (const [mode, count] of entries) {
+      for (const contact of entries) {
         const pill = document.createElement('span');
         pill.className = 'mode-pill';
-        pill.textContent = mode + ' · ' + rankingNumber(count);
+        pill.textContent = contact.station
+          ? contact.station + ' · ' + contact.mode
+          : contact.mode + ' · ' + rankingNumber(contact.count);
         pills.append(pill);
       }
       value.append(pills);
@@ -142,7 +155,12 @@ function renderRanking(data) {
     bandsCell.append(bandsButton);
     const totalCell = document.createElement('td');
     totalCell.className = 'ranking-total';
-    totalCell.textContent = rankingNumber(record.total);
+    const totalValue = Number(record.total);
+    const totalNumber = document.createElement('strong');
+    totalNumber.textContent = rankingNumber(totalValue);
+    const totalLabel = document.createElement('span');
+    totalLabel.textContent = t(totalValue === 1 ? 'ranking.valid_qso_one' : 'ranking.valid_qso_many');
+    totalCell.append(totalNumber, totalLabel);
     const achievementCell = document.createElement('td');
     achievementCell.className = 'ranking-achievements';
     const labels = { WFF: 'WWFF', POTA: 'POTA', SAT: 'SAT', CW: 'CW' };

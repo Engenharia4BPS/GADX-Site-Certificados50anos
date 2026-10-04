@@ -4,6 +4,7 @@ declare(strict_types=1);
 require_once dirname(__DIR__) . '/_bootstrap.php';
 require_once CERT50_PRIVATE_ROOT . '/app/auth.php';
 require_once CERT50_PRIVATE_ROOT . '/app/certificate.php';
+require_once CERT50_PRIVATE_ROOT . '/app/adif.php';
 
 $admin = require_admin();
 $success = flash('success');
@@ -11,6 +12,7 @@ $error = flash('error');
 $certificateBackground = certificate_background();
 $hallPhoto = certificate_hall_photo();
 $certificateLogo = certificate_logo();
+$eventStations = event_stations();
 
 $uploads = db()->query(
     'SELECT u.id, u.label, u.activity_date, u.source_filename, u.stored_filename, u.is_satellite, u.is_wff, u.notes, u.created_at,
@@ -33,6 +35,24 @@ foreach (['bands' => 'band', 'modes' => 'mode'] as $group => $column) {
     foreach ($stats as $stat) {
         $breakdowns[(int) $stat['upload_id']][$group][] = $stat;
     }
+}
+
+$stationsByUpload = [];
+$stationRows = db()->query('SELECT upload_id, station_callsign, qso_count FROM upload_stations ORDER BY upload_id, station_callsign')->fetchAll();
+foreach ($stationRows as $stationRow) {
+    $stationsByUpload[(int) $stationRow['upload_id']][] = $stationRow;
+}
+
+$currentSnapshots = [];
+$currentRows = db()->query(
+    'SELECT current_upload.station_callsign, current_upload.upload_id, current_upload.updated_at, u.stored_filename, u.source_filename, upload_stations.qso_count
+     FROM station_current_uploads current_upload
+     INNER JOIN uploads u ON u.id = current_upload.upload_id
+     INNER JOIN upload_stations ON upload_stations.upload_id = current_upload.upload_id AND upload_stations.station_callsign = current_upload.station_callsign
+     ORDER BY current_upload.station_callsign'
+)->fetchAll();
+foreach ($currentRows as $currentRow) {
+    $currentSnapshots[$currentRow['station_callsign']] = $currentRow;
 }
 
 $endorsementsByUpload = [];
@@ -59,6 +79,7 @@ $formatDate = static function (?string $date): string {
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1">
   <title>Organização — Araucária DX 50 anos</title>
+  <link rel="icon" href="../assets/favicon.svg?v=<?= (int) filemtime(dirname(__DIR__) . '/assets/favicon.svg') ?>" type="image/svg+xml" sizes="any">
   <link rel="stylesheet" href="../assets/site.css">
 </head>
 <body>
@@ -70,7 +91,7 @@ $formatDate = static function (?string $date): string {
   <main class="admin-shell">
     <p class="eyebrow">ORGANIZAÇÃO</p>
     <h1>Importar logs e reconhecer participantes</h1>
-    <p class="lead">Cada ADIF importado alimenta a consulta pública. Revise as estatísticas de cada operação e escolha os endossos aplicados a todos os seus participantes.</p>
+    <p class="lead">Cada ADIF é tratado como um snapshot completo das estações que ele contém. Você pode enviar um log de uma estação ou um ADIF misturado; o ranking sempre usa a versão mais recente de cada uma.</p>
     <nav class="admin-nav">
       <a href="#nova-importacao">Nova importação</a>
       <a href="#adifs-importados">ADIFs importados</a>
@@ -84,10 +105,21 @@ $formatDate = static function (?string $date): string {
     <?php if ($success): ?><p class="flash"><?= h($success) ?></p><?php endif; ?>
     <?php if ($error): ?><p class="flash danger"><?= h($error) ?></p><?php endif; ?>
 
+    <section class="admin-card" aria-labelledby="station-sync-title">
+      <p class="eyebrow">SINCRONIZAÇÃO ATUAL</p>
+      <h2 id="station-sync-title">Logs vigentes por estação</h2>
+      <div class="upload-stat-grid station-sync-grid">
+        <?php foreach ($eventStations as $station): ?>
+          <?php $snapshot = $currentSnapshots[$station] ?? null; ?>
+          <div><span><?= h($station) ?></span><?php if ($snapshot): ?><strong><?= h((string) $snapshot['qso_count']) ?> QSOs</strong><p class="small"><?= h($snapshot['stored_filename']) ?><br>Atualizado em <?= h($snapshot['updated_at']) ?></p><?php else: ?><strong>—</strong><p class="small">Aguardando primeiro snapshot.</p><?php endif; ?></div>
+        <?php endforeach; ?>
+      </div>
+    </section>
+
     <div id="nova-importacao" class="admin-grid">
       <section class="admin-card">
         <h2>Nova importação ADIF</h2>
-        <p>Escolha o ADIF. A data será lida dos QSOs e os detalhes da operação poderão ser ajustados na lista de ADIFs.</p>
+        <p>Envie um ADIF completo. Ele pode conter uma ou mais estações habilitadas; use <code>STATION_CALLSIGN</code>, <code>MY_CALL</code> ou o cabeçalho padrão de exportação do Club Log.</p>
         <form action="import.php" method="post" enctype="multipart/form-data">
           <input type="hidden" name="csrf" value="<?= h(csrf_token()) ?>">
           <label class="field">Arquivo ADIF (.adi ou .adif)<input type="file" name="adif" accept=".adi,.adif,text/plain" required></label>
@@ -97,9 +129,10 @@ $formatDate = static function (?string $date): string {
       <aside class="admin-card">
         <h2>Como funciona</h2>
         <ul>
-          <li>Cada arquivo recebe um identificador como <code>Log50ano001-wsjtx_log.adi</code>.</li>
-          <li>A primeira data válida do ADIF é usada como data da operação.</li>
-          <li>Endossos, ativações e observações são configurados na lista de ADIFs.</li>
+          <li>Cada arquivo recebe um identificador como <code>Log50ano001-ZW50B-wsjtx_log.adi</code>.</li>
+          <li>São aceitas apenas ZW5B, ZW50B, PY5GA e PQ5TA.</li>
+          <li>O novo arquivo passa a ser o snapshot vigente somente das estações encontradas nele.</li>
+          <li>WWFF, POTA e satélite são lidos por QSO nos campos do próprio ADIF.</li>
           <li>O ADIF original fica protegido fora de <code>public_html</code>.</li>
         </ul>
       </aside>
@@ -193,11 +226,9 @@ $formatDate = static function (?string $date): string {
           <?php foreach ($uploads as $upload): ?>
             <?php
               $uploadId = (int) $upload['id'];
-              $hasSatellite = (int) $upload['is_satellite'] === 1;
-              $hasWff = (int) $upload['is_wff'] === 1;
               $uploadEndorsements = $endorsementsByUpload[$uploadId] ?? [];
-              $hasPota = (bool) array_filter($uploadEndorsements, static fn(array $endorsement): bool => $endorsement['code'] === 'POTA');
-              $customEndorsements = array_values(array_filter($uploadEndorsements, static fn(array $endorsement): bool => $endorsement['code'] !== 'POTA'));
+              $customEndorsements = array_values(array_filter($uploadEndorsements, static fn(array $endorsement): bool => !in_array($endorsement['code'], ['WFF', 'POTA', 'SAT', 'CW'], true)));
+              $uploadStations = $stationsByUpload[$uploadId] ?? [];
               $hasMfsk = (bool) array_filter($breakdowns[$uploadId]['modes'] ?? [], static fn(array $stat): bool => strtoupper((string) $stat['label']) === 'MFSK');
               $activationText = implode(PHP_EOL, array_map(
                   static fn(array $activation): string => $activation['reference_code'] . ($activation['name'] ? ' | ' . $activation['name'] : ''),
@@ -213,13 +244,11 @@ $formatDate = static function (?string $date): string {
                 <div>
                   <p class="eyebrow">ADIF <?= h($upload['stored_filename']) ?> · <?= h($formatDate($upload['activity_date'])) ?></p>
                   <h3><?= h($upload['label']) ?></h3>
-                  <p class="upload-meta"><strong>Nome enviado:</strong> <?= h($upload['source_filename']) ?> · Importado por <?= h($upload['created_by_email']) ?></p>
+                  <p class="upload-meta"><strong>Nome enviado:</strong> <?= h($upload['source_filename']) ?> · Importado por <?= h($upload['created_by_email']) ?><?php if ($uploadStations): ?> · <strong>Estações:</strong> <?= h(implode(', ', array_column($uploadStations, 'station_callsign'))) ?><?php endif; ?></p>
                 </div>
                 <div class="current-endorsements" aria-label="Endossos atuais">
                   <span class="tag">Araucária DX · 50 anos</span>
-                  <?php if ($hasSatellite): ?><span class="tag">Via satélite</span><?php endif; ?>
-                  <?php if ($hasWff): ?><span class="tag">Ativação WWFF</span><?php endif; ?>
-                  <?php if ($hasPota): ?><span class="tag">Ativação POTA</span><?php endif; ?>
+                  <?php foreach ($uploadStations as $station): ?><span class="tag"><?= h($station['station_callsign']) ?> · <?= h((string) $station['qso_count']) ?></span><?php endforeach; ?>
                   <?php foreach ($customEndorsements as $endorsement): ?><span class="tag"><?= h($endorsement['label']) ?></span><?php endforeach; ?>
                 </div>
               </div>
@@ -236,21 +265,15 @@ $formatDate = static function (?string $date): string {
                 <form action="update-upload.php" method="post">
                   <input type="hidden" name="csrf" value="<?= h(csrf_token()) ?>">
                   <input type="hidden" name="upload_id" value="<?= $uploadId ?>">
-                  <p class="editor-help">O selo <strong>Araucária DX · 50 anos</strong> é aplicado automaticamente. As escolhas abaixo valem para todos os participantes deste arquivo; o selo CW é reconhecido pelo modo de cada QSO.</p>
+                  <p class="editor-help">O selo <strong>Araucária DX · 50 anos</strong> é aplicado automaticamente. WWFF, POTA, satélite e CW são identificados por QSO no ADIF; edite abaixo apenas o título, referências, endossos extras e observações.</p>
                   <div class="two-fields">
                     <label class="field">Nome da operação<input name="label" maxlength="180" value="<?= h($upload['label']) ?>" required></label>
                     <label class="field">Data da atividade<input type="date" name="activity_date" value="<?= h($upload['activity_date']) ?>"></label>
                   </div>
-                  <div class="checkbox-row">
-                    <label class="checkbox"><input type="checkbox" name="satellite" value="1"<?= $hasSatellite ? ' checked' : '' ?>>Contato via satélite</label>
-                    <label class="checkbox"><input type="checkbox" name="wff" value="1"<?= $hasWff ? ' checked' : '' ?>>Ativação WWFF</label>
-                    <label class="checkbox"><input type="checkbox" name="pota" value="1"<?= $hasPota ? ' checked' : '' ?>>Ativação POTA</label>
-                  </div>
-                  <p class="small">Marque POTA apenas quando os contatos deste ADIF participarem da ativação POTA.</p>
-                  <label class="field">Unidades de conservação<textarea name="activations" placeholder="Uma por linha: PR-0001 | Nome da unidade&#10;Se não houver, deixe em branco."><?= h($activationText) ?></textarea></label>
+                  <label class="field">Unidades de conservação<textarea name="activations" placeholder="Uma por linha: PR-0001 | Nome da unidade&#10;Se não houver, deixe em branco."><?= h($activationText) ?></textarea><span class="small">Ao salvar, estas referências passam a aparecer imediatamente nos diplomas de todos os contatos deste snapshot vigente.</span></label>
                   <label class="field">Endossos adicionais<textarea name="endorsements" placeholder="Um por linha: CODIGO | Nome do endosso&#10;Ex.: SAT-QO100 | QO-100"><?= h($customText) ?></textarea></label>
                   <label class="field">Observações internas<textarea name="notes" placeholder="Opcional — não aparece no diploma."><?= h($upload['notes']) ?></textarea></label>
-                  <div class="form-actions"><button type="submit">Salvar alterações</button></div>
+                  <div class="form-actions"><button type="submit">Salvar e atualizar diplomas</button></div>
                 </form>
                 <?php if ($hasMfsk): ?>
                   <form action="reindex-modes.php" method="post" class="reindex-form">
@@ -266,7 +289,7 @@ $formatDate = static function (?string $date): string {
                 <form action="delete-upload.php" method="post">
                   <input type="hidden" name="csrf" value="<?= h(csrf_token()) ?>">
                   <input type="hidden" name="upload_id" value="<?= $uploadId ?>">
-                  <p>Isso apagará <strong><?= h($upload['stored_filename']) ?></strong>, seus <?= h((string) $upload['qso_count']) ?> QSOs, ativações e endossos. O ranking e os certificados serão recalculados sem esses contatos. Esta ação não pode ser desfeita.</p>
+                  <p>Isso apagará o snapshot <strong><?= h($upload['stored_filename']) ?></strong>, seus <?= h((string) $upload['qso_count']) ?> QSOs e seus metadados. Se ele for o snapshot vigente de uma estação, o sistema volta ao snapshot anterior disponível para ela. Esta ação não pode ser desfeita.</p>
                   <label class="upload-delete-confirm"><input type="checkbox" name="confirm_delete" value="1" required> Confirmo que quero apagar este log e seus dados.</label>
                   <button type="submit" class="delete-button">Apagar log definitivamente</button>
                 </form>

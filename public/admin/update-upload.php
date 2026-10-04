@@ -69,8 +69,8 @@ try {
     if (!$exists->fetchColumn()) throw new RuntimeException('Esta importação ADIF não foi encontrada.');
 
     $pdo->beginTransaction();
-    $update = $pdo->prepare('UPDATE uploads SET label = ?, activity_date = ?, is_satellite = ?, is_wff = ?, notes = ? WHERE id = ?');
-    $update->execute([$label, $activityDate, isset($_POST['satellite']) ? 1 : 0, isset($_POST['wff']) ? 1 : 0, $notes, $uploadId]);
+    $update = $pdo->prepare('UPDATE uploads SET label = ?, activity_date = ?, notes = ? WHERE id = ?');
+    $update->execute([$label, $activityDate, $notes, $uploadId]);
 
     $removeActivations = $pdo->prepare('DELETE FROM activations WHERE upload_id = ?');
     $removeActivations->execute([$uploadId]);
@@ -83,9 +83,6 @@ try {
 
     $removeCustom = $pdo->prepare('DELETE FROM endorsements WHERE upload_id = ?');
     $removeCustom->execute([$uploadId]);
-    if (isset($_POST['pota'])) {
-        $customEndorsements['POTA'] = ['code' => 'POTA', 'label' => 'Ativação POTA'];
-    }
     if ($customEndorsements) {
         $insertCustom = $pdo->prepare('INSERT INTO endorsements (upload_id, code, label) VALUES (?, ?, ?)');
         foreach ($customEndorsements as $endorsement) {
@@ -94,7 +91,7 @@ try {
     }
     $pdo->commit();
 
-    flash('success', 'Dados da operação e endossos atualizados.');
+    flash('success', 'Dados atualizados. As referências já estão disponíveis nos diplomas dos contatos deste snapshot vigente.');
 } catch (RuntimeException $error) {
     if (isset($pdo) && $pdo->inTransaction()) $pdo->rollBack();
     flash('error', $error->getMessage());

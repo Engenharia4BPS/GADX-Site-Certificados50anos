@@ -23,8 +23,8 @@ if ($preview !== null) {
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="description" content="Diploma comemorativo dos 50 anos da Araucária DX.">
   <title>Araucária DX — 50 anos</title>
-  <link rel="icon" href="assets/favicon.svg" type="image/svg+xml">
-  <link rel="stylesheet" href="assets/site.css">
+  <link rel="icon" href="assets/favicon.svg?v=<?= (int) filemtime(__DIR__ . '/assets/favicon.svg') ?>" type="image/svg+xml" sizes="any">
+  <link rel="stylesheet" href="assets/site.css?v=<?= (int) filemtime(__DIR__ . '/assets/site.css') ?>">
   <?php if ($certificateBackground): ?>
     <style>.certificate--with-background { background-image: url("assets/certificate/<?= rawurlencode($certificateBackground['filename']) ?>?v=<?= (int) filemtime($certificateBackground['path']) ?>"); background-position: center; background-repeat: no-repeat; background-size: cover; }</style>
   <?php endif; ?>
@@ -73,7 +73,7 @@ if ($preview !== null) {
 
     <section id="ranking" class="ranking-section print-hidden" aria-labelledby="ranking-title">
       <div class="ranking-heading">
-        <div><p class="eyebrow" data-i18n="ranking.eyebrow">LOGS DA ZW50B</p><h2 id="ranking-title" data-i18n="ranking.title">Ranking de participantes</h2><p data-i18n="ranking.description">Ordenado por bandas distintas; em caso de empate, pelo total de QSOs. SAT é uma categoria adicional e não aumenta o total de bandas.</p></div>
+        <div><p class="eyebrow" data-i18n="ranking.eyebrow">LOGS DAS ESTAÇÕES COMEMORATIVAS</p><h2 id="ranking-title" data-i18n="ranking.title">Ranking de participantes</h2><p data-i18n="ranking.description">ZW5B, ZW50B, PY5GA e PQ5TA. Ordenado por bandas distintas; em caso de empate, por combinações únicas de estação, banda e modo. Repetições não aumentam a pontuação.</p></div>
         <form id="ranking-search" class="ranking-search" role="search">
           <label for="ranking-callsign" data-i18n="ranking.search_label">Buscar indicativo</label>
           <div><input id="ranking-callsign" name="q" maxlength="32" autocomplete="off" autocapitalize="characters" placeholder="Ex.: PY5XT" data-i18n-placeholder="lookup.placeholder"><button type="submit" data-i18n="ranking.search_button">Buscar</button></div>
@@ -84,7 +84,7 @@ if ($preview !== null) {
       <div class="ranking-table-scroll">
         <table class="ranking-table">
           <caption class="sr-only" data-i18n="ranking.caption">Participantes, bandas trabalhadas, contatos totais e conquistas</caption>
-          <thead><tr><th scope="col" data-i18n="ranking.header_call">CALL</th><th scope="col" data-i18n="ranking.header_bands">BANDS</th><th scope="col" data-i18n="ranking.header_total">TOTAL</th><th scope="col" data-i18n="ranking.header_achievements">ACHIEVEMENTS</th></tr></thead>
+          <thead><tr><th scope="col" data-i18n="ranking.header_call">CALL</th><th scope="col" data-i18n="ranking.header_bands">BANDS</th><th scope="col" data-i18n="ranking.header_total" data-i18n-title="ranking.total_help">TOTAL</th><th scope="col" data-i18n="ranking.header_achievements">ACHIEVEMENTS</th></tr></thead>
           <tbody id="ranking-rows"></tbody>
         </table>
       </div>
@@ -156,8 +156,8 @@ if ($preview !== null) {
     ?>
     <script>window.CERT50_PREVIEW = <?= json_encode(['variant' => $preview, 'data' => $sample], JSON_UNESCAPED_UNICODE | JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT) ?>;</script>
   <?php endif; ?>
-  <script src="assets/i18n.js" defer></script>
-  <script src="assets/award.js" defer></script>
-  <script src="assets/ranking.js" defer></script>
+  <script src="assets/i18n.js?v=<?= (int) filemtime(__DIR__ . '/assets/i18n.js') ?>" defer></script>
+  <script src="assets/award.js?v=<?= (int) filemtime(__DIR__ . '/assets/award.js') ?>" defer></script>
+  <script src="assets/ranking.js?v=<?= (int) filemtime(__DIR__ . '/assets/ranking.js') ?>" defer></script>
 </body>
 </html>

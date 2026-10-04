@@ -11,6 +11,14 @@ const localNumber = value => i18n?.number(value) ?? Number(value).toLocaleString
 const cleanCallsign = value => value.toUpperCase().replace(/[^A-Z0-9/]/g, '');
 const text = (element, value) => { element.textContent = value; };
 
+const fetchAward = async callsign => {
+  const parameters = new URLSearchParams({ callsign, refresh: String(Date.now()) });
+  const response = await fetch(`api/award.php?${parameters}`, { cache: 'no-store' });
+  const data = await response.json();
+  if (!response.ok) throw new Error(t('award.error'));
+  return data;
+};
+
 const eventNotice = document.querySelector('#event-notice');
 if (eventNotice) {
   const closeEventNotice = () => {
@@ -33,9 +41,7 @@ form.addEventListener('submit', async event => {
   if (callsign.length < 3) { notice.textContent = t('award.invalid_callsign'); return; }
   notice.textContent = t('award.loading');
   try {
-    const response = await fetch(`api/award.php?callsign=${encodeURIComponent(callsign)}`, { cache: 'no-store' });
-    const data = await response.json();
-    if (!response.ok) throw new Error(t('award.error'));
+    const data = await fetchAward(callsign);
     if (!data.found) { notice.textContent = t('award.not_found', { callsign }); return; }
     currentRecord = data;
     render(data);
@@ -102,6 +108,18 @@ if (window.CERT50_PREVIEW) {
 document.addEventListener('cert50:languagechange', () => {
   if (!currentRecord) return;
   render(currentRecord, document.querySelector('#certificate').classList.contains('certificate--hall') ? 'hall' : 'participation', false);
+});
+
+document.addEventListener('visibilitychange', async () => {
+  if (document.visibilityState !== 'visible' || !currentRecord || window.CERT50_PREVIEW) return;
+  try {
+    const updatedRecord = await fetchAward(currentRecord.callsign);
+    if (!updatedRecord.found) return;
+    currentRecord = updatedRecord;
+    render(updatedRecord, 'participation', false);
+  } catch (error) {
+    // Mantém o diploma já exibido se a atualização silenciosa falhar.
+  }
 });
 
 document.querySelector('#print-certificate')?.addEventListener('click', async () => {

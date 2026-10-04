@@ -26,15 +26,19 @@ Não envie a pasta raiz inteira para `public_html`: somente o conteúdo de `publ
 
 - Público: `https://araucariadx.com/50anos/`
 - Organização: `https://araucariadx.com/50anos/admin/`
-- Importe um ADIF por operação e marque WWFF, POTA, satélite, unidades de conservação e endossos adicionais. O selo CW é reconhecido automaticamente nos QSOs cujo modo é CW.
-- POTA é marcado por ADIF na edição da operação. O selo usa a tabela `endorsements` já existente; nenhuma alteração no banco é necessária.
+- Cada envio é um snapshot completo: o ADIF pode trazer uma ou várias das estações habilitadas: ZW5B, ZW50B, PY5GA e PQ5TA. Para cada estação encontrada, somente o snapshot mais recente alimenta o ranking e os diplomas.
+- A estação é lida de STATION_CALLSIGN ou MY_CALL. Exportações do Club Log sem esses campos também são reconhecidas pelo cabeçalho “Log export of INDICATIVO”. WWFF é reconhecido por MY_WWFF_REF, POTA por MY_POTA_REF, satélite por PROP_MODE=SAT ou SAT_NAME, e CW pelo modo do QSO.
 - O painel permite enviar a foto do Hall of Fame e abrir as prévias visuais de Participação e Hall of Fame com dados ilustrativos. Até a regra de elegibilidade ser definida, a consulta pública emite apenas Participação.
 - Em “Logo 50 anos”, envie a marca oficial em PNG, JPG ou WebP para substituir o pequeno círculo ao lado do título em ambas as versões do certificado. Sem uma logo enviada, o círculo continua visível.
-- O ranking público reúne os contatos de todos os ADIFs da ZW50B: uma linha por indicativo, bandas distintas, QSOs totais e conquistas. Ao abrir BANDS, mostra os modos e respectivas quantidades em cada banda; SAT é uma coluna adicional e não duplica o TOTAL.
+- O ranking público reúne os snapshots vigentes de todas as quatro estações: uma linha por indicativo, bandas distintas, QSOs totais e conquistas. Ao abrir BANDS, mostra os modos e respectivas quantidades em cada banda; SAT é uma coluna adicional e não duplica o TOTAL.
 - Em novas importações, o submodo FT4 de ADIFs MFSK é mostrado como FT4. Para ADIFs antigos que aparecem como MFSK, abra a operação no painel e use “Identificar submodos”; a rotina confere o arquivo original antes de atualizar o modo, sem duplicar QSOs.
-- Em “ADIFs importados”, cada log tem a opção “Apagar este log”. Após a confirmação, a exclusão remove o ADIF privado e os QSOs, ativações e endossos daquele arquivo; o ranking e os certificados deixam de contabilizá-lo. A ação não pode ser desfeita.
+- Em “ADIFs importados”, cada log tem a opção “Apagar este log”. Se ele for o snapshot vigente de alguma estação, o painel volta ao snapshot anterior disponível para ela. A ação não pode ser desfeita.
 
 Os ADIFs originais são guardados fora de `public_html`. Nunca envie `config.php`, `private-path.php` ou arquivos de `private/storage/` ao GitHub.
+
+## Atualização para snapshots de estações
+
+Em uma instalação que já possui dados, faça backup do banco e execute uma única vez o arquivo sql/migrations/2026-10-03-station-snapshots.sql no phpMyAdmin **antes** de enviar os arquivos atualizados. A migração preserva os dados antigos como histórico da ZW50B até que o primeiro ADIF completo dessa estação seja sincronizado.
 
 ## Atualização da tipografia
 
