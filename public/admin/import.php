@@ -74,6 +74,7 @@ try {
     $safeStem = substr($safeStem, 0, 230);
 
     $pdo = db();
+    $cumulativeMode = cumulative_imports_enabled($pdo);
     $pdo->beginTransaction();
 
     // The database ID is the stable sequential index used in the stored filename.
@@ -110,14 +111,19 @@ try {
         ]);
     }
     $stationInsert = $pdo->prepare('INSERT INTO upload_stations (upload_id, station_callsign, qso_count) VALUES (?, ?, ?)');
+    $includeInAggregate = $cumulativeMode
+        ? $pdo->prepare('INSERT INTO aggregate_upload_stations (upload_id, station_callsign) VALUES (?, ?)')
+        : null;
     $setCurrent = $pdo->prepare('INSERT INTO station_current_uploads (station_callsign, upload_id) VALUES (?, ?) ON DUPLICATE KEY UPDATE upload_id = VALUES(upload_id), updated_at = CURRENT_TIMESTAMP');
     foreach ($stationGroups as $station => $stationQsos) {
         $stationInsert->execute([$uploadId, $station, count($stationQsos)]);
+        if ($includeInAggregate) $includeInAggregate->execute([$uploadId, $station]);
         $setCurrent->execute([$station, $uploadId]);
     }
 
     $pdo->commit();
-    flash('success', sprintf('%s sincronizado: %d QSOs, %d indicativos únicos e %d estação(ões): %s.', $storedName, count($qsos), count(array_unique(array_column($qsos, 'callsign'))), count($stationGroups), implode(', ', array_keys($stationGroups))));
+    $verb = $cumulativeMode ? 'incorporado ao acumulado' : 'sincronizado';
+    flash('success', sprintf('%s %s: %d QSOs, %d indicativos únicos e %d estação(ões): %s.', $storedName, $verb, count($qsos), count(array_unique(array_column($qsos, 'callsign'))), count($stationGroups), implode(', ', array_keys($stationGroups))));
 } catch (Throwable $error) {
     if (isset($pdo) && $pdo->inTransaction()) $pdo->rollBack();
     if (isset($storedName)) @unlink((CERT50_PRIVATE_ROOT ?? '') . '/storage/adif/' . $storedName);

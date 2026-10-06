@@ -26,19 +26,33 @@ Não envie a pasta raiz inteira para `public_html`: somente o conteúdo de `publ
 
 - Público: `https://araucariadx.com/50anos/`
 - Organização: `https://araucariadx.com/50anos/admin/`
-- Cada envio é um snapshot completo: o ADIF pode trazer uma ou várias das estações habilitadas: ZW5B, ZW50B, PY5GA e PQ5TA. Para cada estação encontrada, somente o snapshot mais recente alimenta o ranking e os diplomas.
+- Cada envio é incorporado ao histórico acumulado. O ADIF pode ser completo, parcial, sobreposto a arquivos anteriores e trazer uma ou várias das estações habilitadas: ZW5B, ZW50B, PY5GA e PQ5TA.
+- Exemplo: enviar `X`, depois `X + Y` e depois somente `Z` produz o conjunto acumulado `X + Y + Z`; a repetição de `X` permanece guardada nos arquivos de origem, mas não aumenta os QSOs válidos.
 - A estação é lida de STATION_CALLSIGN ou MY_CALL. Exportações do Club Log sem esses campos também são reconhecidas pelo cabeçalho “Log export of INDICATIVO”. WWFF é reconhecido por MY_WWFF_REF, POTA por MY_POTA_REF, satélite por PROP_MODE=SAT ou SAT_NAME, e CW pelo modo do QSO.
 - O painel permite enviar a foto do Hall of Fame e abrir as prévias visuais de Participação e Hall of Fame com dados ilustrativos. Até a regra de elegibilidade ser definida, a consulta pública emite apenas Participação.
 - Em “Logo 50 anos”, envie a marca oficial em PNG, JPG ou WebP para substituir o pequeno círculo ao lado do título em ambas as versões do certificado. Sem uma logo enviada, o círculo continua visível.
-- O ranking público reúne os snapshots vigentes de todas as quatro estações: uma linha por indicativo, bandas distintas, QSOs totais e conquistas. Ao abrir BANDS, mostra os modos e respectivas quantidades em cada banda; SAT é uma coluna adicional e não duplica o TOTAL.
+- O ranking público consolida todos os arquivos incorporados das quatro estações: uma linha por indicativo, bandas distintas, QSOs válidos e conquistas. Cada combinação de estação, banda e modo conta apenas uma vez por participante, mesmo que apareça em vários arquivos. Ao abrir BANDS, a estação e o modo ficam identificados; SAT é uma coluna adicional e não duplica o TOTAL.
 - Em novas importações, o submodo FT4 de ADIFs MFSK é mostrado como FT4. Para ADIFs antigos que aparecem como MFSK, abra a operação no painel e use “Identificar submodos”; a rotina confere o arquivo original antes de atualizar o modo, sem duplicar QSOs.
-- Em “ADIFs importados”, cada log tem a opção “Apagar este log”. Se ele for o snapshot vigente de alguma estação, o painel volta ao snapshot anterior disponível para ela. A ação não pode ser desfeita.
+- Em “ADIFs importados”, cada log tem a opção “Apagar este log”. As contribuições exclusivas dele saem do acumulado; contatos que também existam em outros arquivos permanecem. A ação não pode ser desfeita.
 
 Os ADIFs originais são guardados fora de `public_html`. Nunca envie `config.php`, `private-path.php` ou arquivos de `private/storage/` ao GitHub.
+
+## Segurança da publicação
+
+- Envie também `public/.htaccess`: ele força HTTPS e adiciona HSTS, CSP, proteção contra iframe, `nosniff`, política de referência e restrições de permissões do navegador.
+- O login limita, por padrão, 5 falhas para a mesma combinação de IP e e-mail e 20 falhas por IP em 15 minutos. Os contadores ficam em uma pasta privada criada dentro de `session_save_path`; nenhuma migração de banco é necessária.
+- Os limites podem ser ajustados pela chave opcional `login_rate_limit` mostrada em `private/app/config.example.php`. O `config.php` atual não precisa ser alterado para usar os valores seguros padrão.
+- Depois da primeira instalação, remova ou renomeie `public/admin/setup.php` no servidor.
 
 ## Atualização para snapshots de estações
 
 Em uma instalação que já possui dados, faça backup do banco e execute uma única vez o arquivo sql/migrations/2026-10-03-station-snapshots.sql no phpMyAdmin **antes** de enviar os arquivos atualizados. A migração preserva os dados antigos como histórico da ZW50B até que o primeiro ADIF completo dessa estação seja sincronizado.
+
+## Atualização para logs acumulados
+
+Depois da migração de snapshots acima, faça outro backup e execute uma única vez `sql/migrations/2026-10-04-accumulated-logs.sql` no phpMyAdmin. Ela parte exatamente dos QSOs que já estavam públicos, sem ressuscitar logs históricos substituídos. A partir daí, cada novo arquivo completo, parcial ou sobreposto é incorporado ao acumulado.
+
+O código detecta automaticamente se essa migração já existe. Antes de executá-la, o site continua usando os snapshots anteriores; depois dela, passa a usar o acumulado. Para evitar que uma importação feita durante a atualização siga a regra antiga, execute a migração e envie os arquivos PHP na mesma janela de manutenção.
 
 ## Atualização da tipografia
 

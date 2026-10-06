@@ -31,6 +31,25 @@ function db(): PDO {
     return $pdo;
 }
 
+function public_qso_source(?PDO $pdo = null): string {
+    static $source = null;
+    if (is_string($source)) return $source;
+
+    $pdo ??= db();
+    try {
+        $pdo->query('SELECT 1 FROM aggregate_qsos LIMIT 0');
+        $source = 'aggregate_qsos';
+    } catch (Throwable) {
+        // Mantém o comportamento anterior até a migração acumulativa ser executada.
+        $source = 'current_qsos';
+    }
+    return $source;
+}
+
+function cumulative_imports_enabled(?PDO $pdo = null): bool {
+    return public_qso_source($pdo) === 'aggregate_qsos';
+}
+
 function h(?string $value): string { return htmlspecialchars($value ?? '', ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8'); }
 
 function start_secure_session(): void {

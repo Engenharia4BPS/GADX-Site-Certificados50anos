@@ -24,6 +24,7 @@ try {
     }
 
     $pdo = db();
+    $cumulativeMode = cumulative_imports_enabled($pdo);
     $pdo->beginTransaction();
 
     $find = $pdo->prepare('SELECT stored_filename FROM uploads WHERE id = ? FOR UPDATE');
@@ -35,7 +36,18 @@ try {
     $stations->execute([$uploadId]);
     $affectedStations = $stations->fetchAll(PDO::FETCH_COLUMN);
     $currentForStation = $pdo->prepare('SELECT upload_id FROM station_current_uploads WHERE station_callsign = ? FOR UPDATE');
-    $previousSnapshot = $pdo->prepare('SELECT upload_id FROM upload_stations WHERE station_callsign = ? AND upload_id <> ? ORDER BY upload_id DESC LIMIT 1');
+    $previousSnapshot = $cumulativeMode
+        ? $pdo->prepare(
+            'SELECT upload_stations.upload_id
+             FROM upload_stations
+             INNER JOIN aggregate_upload_stations included
+               ON included.upload_id = upload_stations.upload_id
+              AND included.station_callsign = upload_stations.station_callsign
+             WHERE upload_stations.station_callsign = ? AND upload_stations.upload_id <> ?
+             ORDER BY upload_stations.upload_id DESC
+             LIMIT 1'
+        )
+        : $pdo->prepare('SELECT upload_id FROM upload_stations WHERE station_callsign = ? AND upload_id <> ? ORDER BY upload_id DESC LIMIT 1');
     $restoreCurrent = $pdo->prepare('UPDATE station_current_uploads SET upload_id = ? WHERE station_callsign = ? AND upload_id = ?');
     $clearCurrent = $pdo->prepare('DELETE FROM station_current_uploads WHERE station_callsign = ? AND upload_id = ?');
     foreach ($affectedStations as $station) {
@@ -80,7 +92,9 @@ try {
         error_log('ARDX50 delete upload: ADIF removido do banco, mas arquivo temporário não pôde ser apagado: ' . $stagedFile);
         flash('error', 'O log foi removido do site, mas o arquivo ADIF privado precisa ser apagado manualmente. Consulte o registro de erros do servidor.');
     } else {
-        flash('success', 'Snapshot ' . $filename . ' apagado. As estações afetadas voltaram ao snapshot anterior disponível.');
+        flash('success', $cumulativeMode
+            ? 'Log ' . $filename . ' apagado. As contribuições exclusivas foram removidas; contatos repetidos em outros arquivos permanecem.'
+            : 'Snapshot ' . $filename . ' apagado. As estações afetadas voltaram ao snapshot anterior disponível.');
     }
 } catch (Throwable $error) {
     if (isset($pdo) && $pdo->inTransaction()) $pdo->rollBack();

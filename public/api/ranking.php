@@ -15,8 +15,9 @@ $perPage = 30;
 
 try {
     $pdo = db();
+    $qsoSource = public_qso_source($pdo);
     $like = $search . '%';
-    $count = $pdo->prepare('SELECT COUNT(DISTINCT callsign) FROM current_qsos WHERE callsign LIKE ?');
+    $count = $pdo->prepare("SELECT COUNT(DISTINCT callsign) FROM $qsoSource WHERE callsign LIKE ?");
     $count->execute([$like]);
     $participantCount = (int) $count->fetchColumn();
     $pageCount = max(1, (int) ceil($participantCount / $perPage));
@@ -27,7 +28,7 @@ try {
         "SELECT callsign,
                 COUNT(DISTINCT CONCAT_WS('|', UPPER(TRIM(station_callsign)), COALESCE(NULLIF(UPPER(TRIM(band)), ''), 'SEM BANDA'), COALESCE(NULLIF(UPPER(TRIM(mode)), ''), 'N/I'))) AS total,
                 COUNT(DISTINCT NULLIF(UPPER(TRIM(band)), '')) AS band_count
-         FROM current_qsos
+         FROM $qsoSource
          WHERE callsign LIKE ?
          GROUP BY callsign
          ORDER BY band_count DESC, total DESC, callsign ASC
@@ -42,7 +43,7 @@ try {
         $details = $pdo->prepare(
             "SELECT q.callsign, q.station_callsign, q.band, q.mode,
                     MAX(q.is_wff) AS is_wff, MAX(q.is_pota) AS is_pota, MAX(q.is_satellite) AS is_satellite
-             FROM current_qsos q
+             FROM $qsoSource q
              WHERE q.callsign IN ($marks)
              GROUP BY q.callsign, q.station_callsign, q.band, q.mode"
         );

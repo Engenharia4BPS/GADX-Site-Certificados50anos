@@ -13,8 +13,10 @@ $certificateBackground = certificate_background();
 $hallPhoto = certificate_hall_photo();
 $certificateLogo = certificate_logo();
 $eventStations = event_stations();
+$pdo = db();
+$cumulativeMode = cumulative_imports_enabled($pdo);
 
-$uploads = db()->query(
+$uploads = $pdo->query(
     'SELECT u.id, u.label, u.activity_date, u.source_filename, u.stored_filename, u.is_satellite, u.is_wff, u.notes, u.created_at,
             a.email AS created_by_email, COUNT(q.id) AS qso_count, COUNT(DISTINCT q.callsign) AS callsign_count
      FROM uploads u
@@ -26,7 +28,7 @@ $uploads = db()->query(
 
 $breakdowns = [];
 foreach (['bands' => 'band', 'modes' => 'mode'] as $group => $column) {
-    $stats = db()->query(
+    $stats = $pdo->query(
         "SELECT upload_id, COALESCE(NULLIF(TRIM($column), ''), 'Não informado') AS label, COUNT(*) AS total
          FROM qsos
          GROUP BY upload_id, COALESCE(NULLIF(TRIM($column), ''), 'Não informado')
@@ -38,31 +40,55 @@ foreach (['bands' => 'band', 'modes' => 'mode'] as $group => $column) {
 }
 
 $stationsByUpload = [];
-$stationRows = db()->query('SELECT upload_id, station_callsign, qso_count FROM upload_stations ORDER BY upload_id, station_callsign')->fetchAll();
+$stationRows = $pdo->query('SELECT upload_id, station_callsign, qso_count FROM upload_stations ORDER BY upload_id, station_callsign')->fetchAll();
 foreach ($stationRows as $stationRow) {
     $stationsByUpload[(int) $stationRow['upload_id']][] = $stationRow;
 }
 
+$aggregateStationsByUpload = [];
+if ($cumulativeMode) {
+    $includedRows = $pdo->query('SELECT upload_id, station_callsign FROM aggregate_upload_stations ORDER BY upload_id, station_callsign')->fetchAll();
+    foreach ($includedRows as $includedRow) {
+        $aggregateStationsByUpload[(int) $includedRow['upload_id']][] = $includedRow['station_callsign'];
+    }
+}
+
 $currentSnapshots = [];
-$currentRows = db()->query(
-    'SELECT current_upload.station_callsign, current_upload.upload_id, current_upload.updated_at, u.stored_filename, u.source_filename, upload_stations.qso_count
-     FROM station_current_uploads current_upload
-     INNER JOIN uploads u ON u.id = current_upload.upload_id
-     INNER JOIN upload_stations ON upload_stations.upload_id = current_upload.upload_id AND upload_stations.station_callsign = current_upload.station_callsign
-     ORDER BY current_upload.station_callsign'
-)->fetchAll();
+$currentRows = $cumulativeMode
+    ? $pdo->query(
+        "SELECT included.station_callsign, included.upload_id, u.created_at AS updated_at, u.stored_filename, u.source_filename, upload_stations.qso_count,
+                (SELECT COUNT(DISTINCT CONCAT_WS('|', UPPER(TRIM(q.callsign)), COALESCE(NULLIF(UPPER(TRIM(q.band)), ''), 'SEM BANDA'), COALESCE(NULLIF(UPPER(TRIM(q.mode)), ''), 'N/I')))
+                 FROM aggregate_qsos q
+                 WHERE q.station_callsign = included.station_callsign) AS aggregate_qso_count
+         FROM aggregate_upload_stations included
+         INNER JOIN (
+             SELECT station_callsign, MAX(upload_id) AS upload_id
+             FROM aggregate_upload_stations
+             GROUP BY station_callsign
+         ) latest ON latest.station_callsign = included.station_callsign AND latest.upload_id = included.upload_id
+         INNER JOIN uploads u ON u.id = included.upload_id
+         INNER JOIN upload_stations ON upload_stations.upload_id = included.upload_id AND upload_stations.station_callsign = included.station_callsign
+         ORDER BY included.station_callsign"
+    )->fetchAll()
+    : $pdo->query(
+        'SELECT current_upload.station_callsign, current_upload.upload_id, current_upload.updated_at, u.stored_filename, u.source_filename, upload_stations.qso_count
+         FROM station_current_uploads current_upload
+         INNER JOIN uploads u ON u.id = current_upload.upload_id
+         INNER JOIN upload_stations ON upload_stations.upload_id = current_upload.upload_id AND upload_stations.station_callsign = current_upload.station_callsign
+         ORDER BY current_upload.station_callsign'
+    )->fetchAll();
 foreach ($currentRows as $currentRow) {
     $currentSnapshots[$currentRow['station_callsign']] = $currentRow;
 }
 
 $endorsementsByUpload = [];
-$endorsements = db()->query('SELECT upload_id, code, label FROM endorsements ORDER BY upload_id, label, code')->fetchAll();
+$endorsements = $pdo->query('SELECT upload_id, code, label FROM endorsements ORDER BY upload_id, label, code')->fetchAll();
 foreach ($endorsements as $endorsement) {
     $endorsementsByUpload[(int) $endorsement['upload_id']][] = $endorsement;
 }
 
 $activationsByUpload = [];
-$activations = db()->query('SELECT upload_id, reference_code, name FROM activations ORDER BY upload_id, reference_code')->fetchAll();
+$activations = $pdo->query('SELECT upload_id, reference_code, name FROM activations ORDER BY upload_id, reference_code')->fetchAll();
 foreach ($activations as $activation) {
     $activationsByUpload[(int) $activation['upload_id']][] = $activation;
 }
@@ -91,7 +117,7 @@ $formatDate = static function (?string $date): string {
   <main class="admin-shell">
     <p class="eyebrow">ORGANIZAÇÃO</p>
     <h1>Importar logs e reconhecer participantes</h1>
-    <p class="lead">Cada ADIF é tratado como um snapshot completo das estações que ele contém. Você pode enviar um log de uma estação ou um ADIF misturado; o ranking sempre usa a versão mais recente de cada uma.</p>
+    <p class="lead"><?php if ($cumulativeMode): ?>Os ADIFs são incorporados ao histórico acumulado. Você pode enviar logs completos, parciais, misturados ou sobrepostos; repetições não aumentam a pontuação válida.<?php else: ?>Cada ADIF é tratado como um snapshot completo das estações que ele contém. Você pode enviar um log de uma estação ou um ADIF misturado; o ranking sempre usa a versão mais recente de cada uma.<?php endif; ?></p>
     <nav class="admin-nav">
       <a href="#nova-importacao">Nova importação</a>
       <a href="#adifs-importados">ADIFs importados</a>
@@ -106,12 +132,12 @@ $formatDate = static function (?string $date): string {
     <?php if ($error): ?><p class="flash danger"><?= h($error) ?></p><?php endif; ?>
 
     <section class="admin-card" aria-labelledby="station-sync-title">
-      <p class="eyebrow">SINCRONIZAÇÃO ATUAL</p>
-      <h2 id="station-sync-title">Logs vigentes por estação</h2>
+      <p class="eyebrow"><?= $cumulativeMode ? 'ACUMULADO ATUAL' : 'SINCRONIZAÇÃO ATUAL' ?></p>
+      <h2 id="station-sync-title"><?= $cumulativeMode ? 'Últimos arquivos incorporados por estação' : 'Logs vigentes por estação' ?></h2>
       <div class="upload-stat-grid station-sync-grid">
         <?php foreach ($eventStations as $station): ?>
           <?php $snapshot = $currentSnapshots[$station] ?? null; ?>
-          <div><span><?= h($station) ?></span><?php if ($snapshot): ?><strong><?= h((string) $snapshot['qso_count']) ?> QSOs</strong><p class="small"><?= h($snapshot['stored_filename']) ?><br>Atualizado em <?= h($snapshot['updated_at']) ?></p><?php else: ?><strong>—</strong><p class="small">Aguardando primeiro snapshot.</p><?php endif; ?></div>
+          <div><span><?= h($station) ?></span><?php if ($snapshot): ?><strong><?= h((string) ($cumulativeMode ? $snapshot['aggregate_qso_count'] : $snapshot['qso_count'])) ?> <?= $cumulativeMode ? 'QSOs válidos acumulados' : 'QSOs' ?></strong><p class="small"><?= h($snapshot['stored_filename']) ?><?php if ($cumulativeMode): ?> · <?= h((string) $snapshot['qso_count']) ?> QSOs neste arquivo<?php endif; ?><br><?= $cumulativeMode ? 'Incorporado em' : 'Atualizado em' ?> <?= h($snapshot['updated_at']) ?></p><?php else: ?><strong>—</strong><p class="small">Aguardando primeiro <?= $cumulativeMode ? 'arquivo' : 'snapshot' ?>.</p><?php endif; ?></div>
         <?php endforeach; ?>
       </div>
     </section>
@@ -119,7 +145,7 @@ $formatDate = static function (?string $date): string {
     <div id="nova-importacao" class="admin-grid">
       <section class="admin-card">
         <h2>Nova importação ADIF</h2>
-        <p>Envie um ADIF completo. Ele pode conter uma ou mais estações habilitadas; use <code>STATION_CALLSIGN</code>, <code>MY_CALL</code> ou o cabeçalho padrão de exportação do Club Log.</p>
+        <p><?php if ($cumulativeMode): ?>Envie um ADIF completo ou parcial. Ele pode conter uma ou mais estações habilitadas e pode se sobrepor a arquivos anteriores; use <code>STATION_CALLSIGN</code>, <code>MY_CALL</code> ou o cabeçalho padrão de exportação do Club Log.<?php else: ?>Envie um ADIF completo. Ele pode conter uma ou mais estações habilitadas; use <code>STATION_CALLSIGN</code>, <code>MY_CALL</code> ou o cabeçalho padrão de exportação do Club Log.<?php endif; ?></p>
         <form action="import.php" method="post" enctype="multipart/form-data">
           <input type="hidden" name="csrf" value="<?= h(csrf_token()) ?>">
           <label class="field">Arquivo ADIF (.adi ou .adif)<input type="file" name="adif" accept=".adi,.adif,text/plain" required></label>
@@ -131,7 +157,12 @@ $formatDate = static function (?string $date): string {
         <ul>
           <li>Cada arquivo recebe um identificador como <code>Log50ano001-ZW50B-wsjtx_log.adi</code>.</li>
           <li>São aceitas apenas ZW5B, ZW50B, PY5GA e PQ5TA.</li>
-          <li>O novo arquivo passa a ser o snapshot vigente somente das estações encontradas nele.</li>
+          <?php if ($cumulativeMode): ?>
+            <li>Cada novo arquivo é somado ao acumulado das estações encontradas nele.</li>
+            <li>Arquivos completos, parciais ou sobrepostos são aceitos; uma mesma combinação de estação, banda e modo conta apenas uma vez por participante.</li>
+          <?php else: ?>
+            <li>O novo arquivo passa a ser o snapshot vigente somente das estações encontradas nele.</li>
+          <?php endif; ?>
           <li>WWFF, POTA e satélite são lidos por QSO nos campos do próprio ADIF.</li>
           <li>O ADIF original fica protegido fora de <code>public_html</code>.</li>
         </ul>
@@ -229,6 +260,7 @@ $formatDate = static function (?string $date): string {
               $uploadEndorsements = $endorsementsByUpload[$uploadId] ?? [];
               $customEndorsements = array_values(array_filter($uploadEndorsements, static fn(array $endorsement): bool => !in_array($endorsement['code'], ['WFF', 'POTA', 'SAT', 'CW'], true)));
               $uploadStations = $stationsByUpload[$uploadId] ?? [];
+              $includedStations = $aggregateStationsByUpload[$uploadId] ?? [];
               $hasMfsk = (bool) array_filter($breakdowns[$uploadId]['modes'] ?? [], static fn(array $stat): bool => strtoupper((string) $stat['label']) === 'MFSK');
               $activationText = implode(PHP_EOL, array_map(
                   static fn(array $activation): string => $activation['reference_code'] . ($activation['name'] ? ' | ' . $activation['name'] : ''),
@@ -248,6 +280,7 @@ $formatDate = static function (?string $date): string {
                 </div>
                 <div class="current-endorsements" aria-label="Endossos atuais">
                   <span class="tag">Araucária DX · 50 anos</span>
+                  <?php if ($cumulativeMode && $includedStations): ?><span class="tag">Acumulado: <?= h(implode(', ', $includedStations)) ?></span><?php elseif ($cumulativeMode): ?><span class="tag">Histórico anterior · fora do acumulado</span><?php endif; ?>
                   <?php foreach ($uploadStations as $station): ?><span class="tag"><?= h($station['station_callsign']) ?> · <?= h((string) $station['qso_count']) ?></span><?php endforeach; ?>
                   <?php foreach ($customEndorsements as $endorsement): ?><span class="tag"><?= h($endorsement['label']) ?></span><?php endforeach; ?>
                 </div>
@@ -270,7 +303,7 @@ $formatDate = static function (?string $date): string {
                     <label class="field">Nome da operação<input name="label" maxlength="180" value="<?= h($upload['label']) ?>" required></label>
                     <label class="field">Data da atividade<input type="date" name="activity_date" value="<?= h($upload['activity_date']) ?>"></label>
                   </div>
-                  <label class="field">Unidades de conservação<textarea name="activations" placeholder="Uma por linha: PR-0001 | Nome da unidade&#10;Se não houver, deixe em branco."><?= h($activationText) ?></textarea><span class="small">Ao salvar, estas referências passam a aparecer imediatamente nos diplomas de todos os contatos deste snapshot vigente.</span></label>
+                  <label class="field">Unidades de conservação<textarea name="activations" placeholder="Uma por linha: PR-0001 | Nome da unidade&#10;Se não houver, deixe em branco."><?= h($activationText) ?></textarea><span class="small">Ao salvar, estas referências passam a aparecer imediatamente nos diplomas de todos os contatos <?= $cumulativeMode ? 'incorporados por este arquivo' : 'deste snapshot vigente' ?>.</span></label>
                   <label class="field">Endossos adicionais<textarea name="endorsements" placeholder="Um por linha: CODIGO | Nome do endosso&#10;Ex.: SAT-QO100 | QO-100"><?= h($customText) ?></textarea></label>
                   <label class="field">Observações internas<textarea name="notes" placeholder="Opcional — não aparece no diploma."><?= h($upload['notes']) ?></textarea></label>
                   <div class="form-actions"><button type="submit">Salvar e atualizar diplomas</button></div>
@@ -289,7 +322,11 @@ $formatDate = static function (?string $date): string {
                 <form action="delete-upload.php" method="post">
                   <input type="hidden" name="csrf" value="<?= h(csrf_token()) ?>">
                   <input type="hidden" name="upload_id" value="<?= $uploadId ?>">
-                  <p>Isso apagará o snapshot <strong><?= h($upload['stored_filename']) ?></strong>, seus <?= h((string) $upload['qso_count']) ?> QSOs e seus metadados. Se ele for o snapshot vigente de uma estação, o sistema volta ao snapshot anterior disponível para ela. Esta ação não pode ser desfeita.</p>
+                  <?php if ($cumulativeMode): ?>
+                    <p>Isso apagará o arquivo <strong><?= h($upload['stored_filename']) ?></strong>, seus <?= h((string) $upload['qso_count']) ?> QSOs e seus metadados. Contribuições exclusivas deste arquivo sairão do acumulado; contatos repetidos em outros arquivos permanecerão. Esta ação não pode ser desfeita.</p>
+                  <?php else: ?>
+                    <p>Isso apagará o snapshot <strong><?= h($upload['stored_filename']) ?></strong>, seus <?= h((string) $upload['qso_count']) ?> QSOs e seus metadados. Se ele for o snapshot vigente de uma estação, o sistema volta ao snapshot anterior disponível para ela. Esta ação não pode ser desfeita.</p>
+                  <?php endif; ?>
                   <label class="upload-delete-confirm"><input type="checkbox" name="confirm_delete" value="1" required> Confirmo que quero apagar este log e seus dados.</label>
                   <button type="submit" class="delete-button">Apagar log definitivamente</button>
                 </form>

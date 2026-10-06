@@ -64,6 +64,7 @@ try {
     }
 
     $pdo = db();
+    $cumulativeMode = cumulative_imports_enabled($pdo);
     $exists = $pdo->prepare('SELECT id FROM uploads WHERE id = ?');
     $exists->execute([$uploadId]);
     if (!$exists->fetchColumn()) throw new RuntimeException('Esta importação ADIF não foi encontrada.');
@@ -91,7 +92,9 @@ try {
     }
     $pdo->commit();
 
-    flash('success', 'Dados atualizados. As referências já estão disponíveis nos diplomas dos contatos deste snapshot vigente.');
+    flash('success', $cumulativeMode
+        ? 'Dados atualizados. As referências já estão disponíveis nos diplomas dos contatos incorporados por este arquivo.'
+        : 'Dados atualizados. As referências já estão disponíveis nos diplomas dos contatos deste snapshot vigente.');
 } catch (RuntimeException $error) {
     if (isset($pdo) && $pdo->inTransaction()) $pdo->rollBack();
     flash('error', $error->getMessage());

@@ -81,9 +81,24 @@ CREATE TABLE station_current_uploads (
   CONSTRAINT fk_station_current_upload FOREIGN KEY (upload_id) REFERENCES uploads(id) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
+CREATE TABLE aggregate_upload_stations (
+  upload_id BIGINT UNSIGNED NOT NULL,
+  station_callsign VARCHAR(32) NOT NULL,
+  PRIMARY KEY (upload_id, station_callsign),
+  KEY idx_aggregate_station (station_callsign),
+  CONSTRAINT fk_aggregate_upload FOREIGN KEY (upload_id) REFERENCES uploads(id) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
 CREATE VIEW current_qsos AS
 SELECT q.*
 FROM qsos q
 LEFT JOIN station_current_uploads current_upload
   ON current_upload.station_callsign = q.station_callsign
 WHERE current_upload.station_callsign IS NULL OR current_upload.upload_id = q.upload_id;
+
+CREATE VIEW aggregate_qsos AS
+SELECT q.*
+FROM qsos q
+INNER JOIN aggregate_upload_stations included
+  ON included.upload_id = q.upload_id
+ AND included.station_callsign = q.station_callsign;

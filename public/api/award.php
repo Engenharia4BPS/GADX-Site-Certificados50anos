@@ -15,7 +15,8 @@ if (strlen($callsign) < 3) {
 
 try {
     $pdo = db();
-    $query = $pdo->prepare('SELECT upload_id, station_callsign, qso_date, band, mode, is_satellite, is_wff, is_pota FROM current_qsos WHERE callsign = ?');
+    $qsoSource = public_qso_source($pdo);
+    $query = $pdo->prepare("SELECT upload_id, station_callsign, qso_date, band, mode, is_satellite, is_wff, is_pota FROM $qsoSource WHERE callsign = ?");
     $query->execute([$callsign]);
     $contacts = $query->fetchAll();
     if (!$contacts) {

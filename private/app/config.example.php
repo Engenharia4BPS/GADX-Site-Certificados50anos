@@ -12,6 +12,11 @@ return [
     'app_key' => 'GERE_UMA_CHAVE_ALEATORIA_LONGA_E_UNICA',
     'install_key' => 'GERE_UMA_CHAVE_UNICA_PARA_A_PRIMEIRA_ATIVACAO',
     'session_save_path' => '/home2/dxaraucariadx/tmp/ardx50-sessions',
+    'login_rate_limit' => [
+        'window_seconds' => 900,
+        'credential_attempts' => 5,
+        'ip_attempts' => 20,
+    ],
     'timezone' => 'America/Sao_Paulo',
     'max_upload_bytes' => 12582912,
 ];

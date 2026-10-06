@@ -9,16 +9,34 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     verify_csrf();
     $email = strtolower(trim((string) ($_POST['email'] ?? '')));
     $password = (string) ($_POST['password'] ?? '');
-    $query = db()->prepare('SELECT id, password_hash FROM admins WHERE email = ? LIMIT 1');
-    $query->execute([$email]);
-    $admin = $query->fetch();
-    if ($admin && password_verify($password, $admin['password_hash'])) {
-        start_secure_session();
-        session_regenerate_id(true);
-        $_SESSION['admin_id'] = (int) $admin['id'];
-        header('Location: index.php'); exit;
+    $rateLimit = login_rate_limit_status($email);
+    if ($rateLimit['blocked']) {
+        http_response_code(429);
+        header('Retry-After: ' . $rateLimit['retry_after']);
+        $minutes = max(1, (int) ceil($rateLimit['retry_after'] / 60));
+        $error = "Muitas tentativas de acesso. Aguarde $minutes minuto(s) e tente novamente.";
+    } else {
+        $query = db()->prepare('SELECT id, password_hash FROM admins WHERE email = ? LIMIT 1');
+        $query->execute([$email]);
+        $admin = $query->fetch();
+        if ($admin && password_verify($password, $admin['password_hash'])) {
+            login_rate_limit_clear_credential($email);
+            start_secure_session();
+            session_regenerate_id(true);
+            $_SESSION['admin_id'] = (int) $admin['id'];
+            header('Location: index.php'); exit;
+        }
+        login_rate_limit_record_failure($email);
+        $rateLimit = login_rate_limit_status($email);
+        if ($rateLimit['blocked']) {
+            http_response_code(429);
+            header('Retry-After: ' . $rateLimit['retry_after']);
+            $minutes = max(1, (int) ceil($rateLimit['retry_after'] / 60));
+            $error = "Muitas tentativas de acesso. Aguarde $minutes minuto(s) e tente novamente.";
+        } else {
+            $error = 'E-mail ou senha incorretos.';
+        }
     }
-    $error = 'E-mail ou senha incorretos.';
 }
 $csrfToken = csrf_token();
 ?>
